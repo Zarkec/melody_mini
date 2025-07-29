@@ -177,6 +177,28 @@ Widget::Widget(QWidget *parent)
     connect(prevButton, &QPushButton::clicked, this, &Widget::playPreviousSong);
     connect(nextButton, &QPushButton::clicked, this, &Widget::playNextSong);
     connect(playModeButton, &QPushButton::clicked, this, &Widget::changePlayMode);
+
+    // --- 系统托盘初始化 ---
+    trayIcon = new QSystemTrayIcon(this);
+    trayIcon->setIcon(QIcon(":/logo.png"));
+    trayIcon->setToolTip("Melody");
+
+    showAction = new QAction("显示窗口", this);
+    connect(showAction, &QAction::triggered, this, &QWidget::showNormal);
+
+    quitAction = new QAction("退出", this);
+    connect(quitAction, &QAction::triggered, qApp, &QCoreApplication::quit);
+
+    trayIconMenu = new QMenu(this);
+    trayIconMenu->addAction(showAction);
+    trayIconMenu->addSeparator();
+    trayIconMenu->addAction(quitAction);
+
+    trayIcon->setContextMenu(trayIconMenu);
+    // 不在这里 show()，而是在 closeEvent 中
+    // trayIcon->show(); 
+
+    connect(trayIcon, &QSystemTrayIcon::activated, this, &Widget::onTrayIconActivated);
 }
 
 Widget::~Widget() {}
@@ -646,6 +668,29 @@ void Widget::updateBackgroundColor(const QColor &newColor)
     backgroundAnimation->setStartValue(currentBackgroundColor);
     backgroundAnimation->setEndValue(newColor);
     backgroundAnimation->start();
+}
+
+void Widget::closeEvent(QCloseEvent *event)
+{
+    // 忽略默认的关闭事件，而是隐藏窗口并显示托盘图标
+    if (this->isVisible()) {
+        event->ignore();
+        this->hide();
+        trayIcon->show();
+        trayIcon->showMessage("Melody", "播放器已最小化到托盘");
+    } else {
+        event->accept();
+    }
+}
+
+void Widget::onTrayIconActivated(QSystemTrayIcon::ActivationReason reason)
+{
+    // 双击托盘图标时显示窗口
+    if (reason == QSystemTrayIcon::DoubleClick) {
+        this->showNormal();
+        this->activateWindow();
+        trayIcon->hide();
+    }
 }
 
 void Widget::resizeEvent(QResizeEvent *event)

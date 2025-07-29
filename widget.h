@@ -7,6 +7,8 @@
 #include <QMap>
 #include <QPropertyAnimation>
 #include <QResizeEvent>
+#include <QCloseEvent>
+#include <QSystemTrayIcon>
 #include "playlistmanager.h" // 引入播放列表管理器
 
 // 前置声明
@@ -24,6 +26,7 @@ class ApiManager;
 class PlaylistManager;
 class QMenu;
 class QWidgetAction;
+class QAction;
 
 class Widget : public QWidget
 {
@@ -71,10 +74,14 @@ private slots:
     // 视图切换
     void onMainStackCurrentChanged(int index);
 
+    // 托盘图标
+    void onTrayIconActivated(QSystemTrayIcon::ActivationReason reason);
+
     QColor getWidgetBackgroundColor() const;
 
 protected:
     void resizeEvent(QResizeEvent *event) override;
+    void closeEvent(QCloseEvent *event) override;
 
 private:
     void playSong(qint64 id); // 新增一个统一的播放歌曲函数
@@ -143,5 +150,11 @@ private:
     QPropertyAnimation *backgroundAnimation;
     QColor currentBackgroundColor;
     QPixmap originalAlbumArt;
+
+    // 系统托盘
+    QSystemTrayIcon *trayIcon;
+    QMenu *trayIconMenu;
+    QAction *showAction;
+    QAction *quitAction;
 };
 #endif // WIDGET_H
