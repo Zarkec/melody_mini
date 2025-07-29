@@ -18,6 +18,8 @@
 #include <QRegularExpression>
 #include <QPixmap>
 #include <QFont>
+#include <QMenu>
+#include <QWidgetAction>
 
 Widget::Widget(QWidget *parent)
     : QWidget(parent), currentDuration(0)
@@ -36,10 +38,21 @@ Widget::Widget(QWidget *parent)
     playModeButton->setFixedWidth(80);
     progressSlider = new QSlider(Qt::Horizontal);
     timeLabel = new QLabel("00:00 / 00:00");
-    volumeSlider = new QSlider(Qt::Horizontal);
+
+    // --- 音量控制 ---
+    volumeButton = new QPushButton("🔊"); // 使用Emoji作为图标
+    volumeButton->setFixedSize(35, 35);
+    volumeButton->setFlat(true); // 使按钮看起来更像一个图标
+
+    volumeSlider = new QSlider(Qt::Vertical); // 设置为垂直
     volumeSlider->setRange(0, 100);
     volumeSlider->setValue(50);
-    volumeSlider->setFixedWidth(100);
+    volumeSlider->setFixedHeight(100); // 设置高度
+
+    volumeMenu = new QMenu(this);
+    volumeAction = new QWidgetAction(this);
+    volumeAction->setDefaultWidget(volumeSlider);
+    volumeMenu->addAction(volumeAction);
 
     // 播放详情页
     playerPage = new QWidget;
@@ -75,8 +88,7 @@ Widget::Widget(QWidget *parent)
     bottomLayout->addWidget(playModeButton); // 添加到布局
     bottomLayout->addWidget(progressSlider);
     bottomLayout->addWidget(timeLabel);
-    bottomLayout->addWidget(new QLabel("音量:"));
-    bottomLayout->addWidget(volumeSlider);
+    bottomLayout->addWidget(volumeButton); // 添加新的音量按钮
 
     mainLayout = new QVBoxLayout(this);
     mainLayout->addLayout(topLayout);
@@ -85,7 +97,7 @@ Widget::Widget(QWidget *parent)
 
     setLayout(mainLayout);
     setWindowTitle("Melody");
-    resize(800, 600);
+    resize(400, 400);
 
     // --- 样式表设置 ---
     QString styleSheet = R"(
@@ -149,6 +161,30 @@ Widget::Widget(QWidget *parent)
             height: 4px;
             border-radius: 2px;
         }
+        QSlider::groove:vertical {
+            border: 1px solid #454545;
+            width: 4px;
+            background: #3D3D3D;
+            margin: 0 2px;
+            border-radius: 2px;
+        }
+        QSlider::handle:vertical {
+            background: #1AD6C9;
+            border: 1px solid #1AD6C9;
+            height: 12px;
+            margin: 0 -4px;
+            border-radius: 6px;
+        }
+        QSlider::add-page:vertical {
+            background: #1AD6C9;
+            border: 1px solid #454545;
+            width: 4px;
+            border-radius: 2px;
+        }
+        QMenu {
+            background-color: #2D2D2D;
+            border: 1px solid #454545;
+        }
     )";
     this->setStyleSheet(styleSheet);
 
@@ -170,6 +206,7 @@ Widget::Widget(QWidget *parent)
     connect(apiManager, &ApiManager::error, this, &Widget::onApiError);
     connect(resultList, &QListWidget::itemDoubleClicked, this, &Widget::onResultItemDoubleClicked);
     connect(playPauseButton, &QPushButton::clicked, this, &Widget::onPlayPauseButtonClicked);
+    connect(volumeButton, &QPushButton::clicked, this, &Widget::onVolumeButtonClicked); // 连接音量按钮
     connect(volumeSlider, &QSlider::valueChanged, this, [this](int value) {
         audioOutput->setVolume(value / 100.0);
     });
@@ -233,6 +270,17 @@ void Widget::onSearchFinished(const QJsonDocument &json)
             playlistManager->addSongs(searchResultSongs);
         }
     }
+}
+
+void Widget::onVolumeButtonClicked()
+{
+    // 在按钮上方居中显示菜单
+    QPoint pos = volumeButton->mapToGlobal(QPoint(0, 0));
+    // 计算水平居中位置
+    pos.setX(pos.x() - (volumeMenu->sizeHint().width() - volumeButton->width()) / 2);
+    // 计算垂直位置，使菜单显示在按钮上方
+    pos.setY(pos.y() - volumeMenu->sizeHint().height());
+    volumeMenu->exec(pos);
 }
 
 void Widget::onLyricFinished(const QJsonDocument &json)

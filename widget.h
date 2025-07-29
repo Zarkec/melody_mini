@@ -20,6 +20,8 @@ class QStackedWidget;
 class QAudioOutput;
 class ApiManager;
 class PlaylistManager;
+class QMenu;
+class QWidgetAction;
 
 class Widget : public QWidget
 {
@@ -53,6 +55,9 @@ private slots:
     void playPreviousSong();
     void changePlayMode();
 
+    // 音量控制
+    void onVolumeButtonClicked();
+
 
 private:
     void playSong(qint64 id); // 新增一个统一的播放歌曲函数
@@ -69,7 +74,10 @@ private:
     QSlider *progressSlider;
     QLabel *timeLabel;
     QSlider *volumeSlider;
-    
+    QPushButton *volumeButton; // 新增音量按钮
+    QMenu *volumeMenu;         // 新增音量菜单
+    QWidgetAction *volumeAction; // 用于将Slider放入Menu
+
     // 播放详情页
     QStackedWidget *mainStackedWidget;
     QWidget *playerPage;
