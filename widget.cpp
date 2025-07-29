@@ -135,6 +135,7 @@ Widget::Widget(QWidget *parent)
 
     setLayout(mainLayout);
     setWindowTitle("Melody");
+    setWindowIcon(QIcon(":/logo.png"));
     resize(400, 400);
 
     // --- 样式表设置 ---
