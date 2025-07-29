@@ -20,6 +20,7 @@
 #include <QFont>
 #include <QMenu>
 #include <QWidgetAction>
+#include <QDebug>
 
 Widget::Widget(QWidget *parent)
     : QWidget(parent), currentDuration(0)
@@ -320,6 +321,15 @@ void Widget::onSongUrlReady(const QUrl &url)
 
 void Widget::onApiError(const QString &errorString)
 {
+    // 检查错误是否与获取歌曲URL有关
+    if (errorString.contains("mp3") && currentPlayingSongId != -1) {
+        qDebug() << "API URL failed, trying fallback direct link for song ID:" << currentPlayingSongId;
+        QString fallbackUrl = QString("https://music.163.com/song/media/outer/url?id=%1.mp3").arg(currentPlayingSongId);
+        mediaPlayer->setSource(QUrl(fallbackUrl));
+        mediaPlayer->play();
+        return; // 尝试备用链接，不显示错误弹窗
+    }
+
     searchButton->setEnabled(true);
     searchButton->setText("搜索");
     QMessageBox::critical(this, "网络错误", errorString);
