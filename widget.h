@@ -109,6 +109,7 @@ private:
     // 播放详情页
     QStackedWidget *mainStackedWidget;
     QWidget *playerPage;
+    QLabel *songNameLabel; // 新增：歌曲名称标签
     QLabel *albumArtLabel;
     QLabel *lyricLabel;
 

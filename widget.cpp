@@ -42,12 +42,13 @@ Widget::Widget(QWidget *parent)
     searchInput = new QLineEdit;
     searchInput->setPlaceholderText("输入歌名或歌手...");
     searchButton = new QPushButton("搜索");
+    backButton = new QPushButton("返回");
+    backButton->setVisible(false); // 默认隐藏
     resultList = new QListWidget;
     playPauseButton = new QPushButton("▶");
     prevButton = new QPushButton("⏮");
     nextButton = new QPushButton("⏭");
     playModeButton = new QPushButton("顺序"); // 初始化播放模式按钮
-    playModeButton->setFixedWidth(80);
     progressSlider = new QSlider(Qt::Horizontal);
     timeLabel = new QLabel("00:00 / 00:00");
 
@@ -76,6 +77,13 @@ Widget::Widget(QWidget *parent)
 
     // 播放详情页
     playerPage = new QWidget;
+    songNameLabel = new QLabel("歌曲名称"); // 初始化
+    songNameLabel->setAlignment(Qt::AlignCenter);
+    QFont songNameFont = songNameLabel->font();
+    songNameFont.setPointSize(16);
+    songNameFont.setBold(true);
+    songNameLabel->setFont(songNameFont);
+
     albumArtLabel = new QLabel;
     albumArtLabel->setScaledContents(true);
     lyricLabel = new QLabel("欢迎使用 Melody");
@@ -85,13 +93,8 @@ Widget::Widget(QWidget *parent)
     lyricFont.setPointSize(14);
     lyricLabel->setFont(lyricFont);
 
-    backButton = new QPushButton("返回");
-
     QVBoxLayout *playerPageLayout = new QVBoxLayout(playerPage);
-    QHBoxLayout *playerTopLayout = new QHBoxLayout();
-    playerTopLayout->addWidget(backButton);
-    playerTopLayout->addStretch();
-    playerPageLayout->addLayout(playerTopLayout);
+    playerPageLayout->addWidget(songNameLabel); // 添加到布局
     playerPageLayout->addWidget(albumArtLabel, 0, Qt::AlignCenter);
     playerPageLayout->addWidget(lyricLabel);
 
@@ -103,6 +106,7 @@ Widget::Widget(QWidget *parent)
 
     // --- 布局设置 ---
     topLayout = new QHBoxLayout;
+    topLayout->addWidget(backButton);
     topLayout->addWidget(searchInput);
     topLayout->addWidget(searchButton);
 
@@ -306,14 +310,16 @@ void Widget::onBackButtonClicked()
 void Widget::onResultItemDoubleClicked(QListWidgetItem *item)
 {
     qint64 clickedSongId = item->data(Qt::UserRole).toLongLong();
+    int index = resultList->row(item);
+    Song clickedSong = searchResultSongs.at(index);
 
     // 检查点击的歌曲是否就是当前正在播放的歌曲
     if (clickedSongId == currentPlayingSongId && mediaPlayer->playbackState() != QMediaPlayer::StoppedState) {
         // 如果是，并且播放器不是停止状态，则只切换回播放界面
+        songNameLabel->setText(clickedSong.name); // 确保歌曲名称正确显示
         mainStackedWidget->setCurrentWidget(playerPage);
     } else {
         // 否则，按正常流程播放新歌曲
-        int index = resultList->row(item);
         playlistManager->setCurrentIndex(index);
         
         Song currentSong = playlistManager->getCurrentSong();
@@ -383,6 +389,15 @@ void Widget::playSong(qint64 id)
 
     currentPlayingSongId = id; // 更新当前播放的歌曲ID
 
+    // 从播放列表获取当前歌曲信息
+    Song currentSong = playlistManager->getCurrentSong();
+    if (currentSong.id == id) {
+        songNameLabel->setText(currentSong.name);
+    } else {
+        songNameLabel->setText("加载中...");
+    }
+
+
     // 重置UI
     originalAlbumArt = QPixmap();
     albumArtLabel->setPixmap(QPixmap());
@@ -440,13 +455,13 @@ void Widget::changePlayMode()
     // 更新UI图标和提示
     switch(nextMode) {
         case PlaylistManager::Sequential:
-            playModeButton->setText("顺序播放");
+            playModeButton->setText("顺序");
             break;
         case PlaylistManager::LoopOne:
-            playModeButton->setText("单曲循环");
+            playModeButton->setText("单曲");
             break;
         case PlaylistManager::Random:
-            playModeButton->setText("随机播放");
+            playModeButton->setText("随机");
             break;
     }
 }
@@ -474,6 +489,7 @@ void Widget::onMainStackCurrentChanged(int index)
 {
     // index 0: resultList, index 1: playerPage
     paginationWidget->setVisible(index == 0);
+    backButton->setVisible(index == 1);
 }
 
 void Widget::parseLyrics(const QString &lyricText)
@@ -534,14 +550,14 @@ void Widget::setWidgetStyle(const QColor &color)
         }
         QLineEdit {
             background-color: rgba(0, 0, 0, 0.2);
-            border: 1px solid %1;
+            border: none;
             border-radius: 5px;
             padding: 5px;
             color: %1;
         }
         QPushButton {
             background-color: rgba(0, 0, 0, 0.2);
-            border: 1px solid %1;
+            border: none;
             border-radius: 5px;
             padding: 5px 10px;
         }
@@ -554,7 +570,7 @@ void Widget::setWidgetStyle(const QColor &color)
         }
         QListWidget {
             background-color: rgba(0, 0, 0, 0.2);
-            border: 1px solid %1;
+            border: none;
             border-radius: 5px;
         }
         QListWidget::item {
@@ -569,7 +585,7 @@ void Widget::setWidgetStyle(const QColor &color)
             color: %2;
         }
         QSlider::groove:horizontal {
-            border: 1px solid #454545;
+            border: none;
             height: 4px;
             background: #3D3D3D;
             margin: 2px 0;
@@ -577,19 +593,19 @@ void Widget::setWidgetStyle(const QColor &color)
         }
         QSlider::handle:horizontal {
             background: %1;
-            border: 1px solid %1;
+            border: none;
             width: 12px;
             margin: -4px 0;
             border-radius: 6px;
         }
         QSlider::sub-page:horizontal {
             background: %1;
-            border: 1px solid #454545;
+            border: none;
             height: 4px;
             border-radius: 2px;
         }
         QSlider::groove:vertical {
-            border: 1px solid #454545;
+            border: none;
             width: 4px;
             background: #3D3D3D;
             margin: 0 2px;
@@ -597,20 +613,20 @@ void Widget::setWidgetStyle(const QColor &color)
         }
         QSlider::handle:vertical {
             background: %1;
-            border: 1px solid %1;
+            border: none;
             height: 12px;
             margin: 0 -4px;
             border-radius: 6px;
         }
         QSlider::add-page:vertical {
             background: %1;
-            border: 1px solid #454545;
+            border: none;
             width: 4px;
             border-radius: 2px;
         }
         QMenu {
             background-color: %3;
-            border: 1px solid %1;
+            border: none;
         }
     )").arg(foregroundColor, color.name(), darkerColor);
 
