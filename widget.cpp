@@ -77,7 +77,6 @@ Widget::Widget(QWidget *parent)
     // 播放详情页
     playerPage = new QWidget;
     albumArtLabel = new QLabel;
-    albumArtLabel->setFixedSize(300, 300);
     albumArtLabel->setScaledContents(true);
     lyricLabel = new QLabel("欢迎使用 Melody");
     lyricLabel->setAlignment(Qt::AlignCenter);
@@ -277,7 +276,10 @@ void Widget::onImageDownloaded(const QByteArray &data)
 {
     QPixmap pixmap;
     if (pixmap.loadFromData(data)) {
-        albumArtLabel->setPixmap(pixmap);
+        originalAlbumArt = pixmap;
+        int size = qMin(this->width(), this->height()) * 0.6;
+        albumArtLabel->setPixmap(originalAlbumArt.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        
         QColor dominantColor = extractDominantColor(pixmap);
         updateBackgroundColor(dominantColor);
     }
@@ -382,6 +384,7 @@ void Widget::playSong(qint64 id)
     currentPlayingSongId = id; // 更新当前播放的歌曲ID
 
     // 重置UI
+    originalAlbumArt = QPixmap();
     albumArtLabel->setPixmap(QPixmap());
     lyricLabel->setText("歌词加载中...");
     updateBackgroundColor(QColor(51, 51, 51));
@@ -626,4 +629,14 @@ void Widget::updateBackgroundColor(const QColor &newColor)
     backgroundAnimation->setStartValue(currentBackgroundColor);
     backgroundAnimation->setEndValue(newColor);
     backgroundAnimation->start();
+}
+
+void Widget::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    if (!originalAlbumArt.isNull())
+    {
+        int size = qMin(this->width(), this->height()) * 0.6;
+        albumArtLabel->setPixmap(originalAlbumArt.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    }
 }

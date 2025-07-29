@@ -6,6 +6,7 @@
 #include <QMediaPlayer>
 #include <QMap>
 #include <QPropertyAnimation>
+#include <QResizeEvent>
 #include "playlistmanager.h" // 引入播放列表管理器
 
 // 前置声明
@@ -72,6 +73,9 @@ private slots:
 
     QColor getWidgetBackgroundColor() const;
 
+protected:
+    void resizeEvent(QResizeEvent *event) override;
+
 private:
     void playSong(qint64 id); // 新增一个统一的播放歌曲函数
     void parseLyrics(const QString &lyricText);
@@ -137,5 +141,6 @@ private:
     // 动态背景
     QPropertyAnimation *backgroundAnimation;
     QColor currentBackgroundColor;
+    QPixmap originalAlbumArt;
 };
 #endif // WIDGET_H
