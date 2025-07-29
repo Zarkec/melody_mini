@@ -24,12 +24,19 @@
 Widget::Widget(QWidget *parent)
     : QWidget(parent), currentDuration(0)
 {
+    this->setObjectName("mainWidget");
     // --- 新增：播放列表管理器初始化 ---
     playlistManager = new PlaylistManager(this);
 
     // --- 业务逻辑变量初始化 ---
     currentPage = 1;
     currentPlayingSongId = -1;
+
+    // --- 动态背景初始化 ---
+    currentBackgroundColor = QColor(51, 51, 51);
+    backgroundAnimation = new QPropertyAnimation(this, "widgetBackgroundColor", this);
+    backgroundAnimation->setDuration(800);
+    backgroundAnimation->setEasingCurve(QEasingCurve::InOutQuad);
 
     // --- UI 控件初始化 ---
     searchInput = new QLineEdit;
@@ -128,93 +135,7 @@ Widget::Widget(QWidget *parent)
     resize(400, 400);
 
     // --- 样式表设置 ---
-    QString styleSheet = R"(
-        QWidget {
-            background-color: #191919;
-            color: #E0E0E0;
-            font-family: 'Microsoft YaHei';
-        }
-        QLineEdit {
-            background-color: #2D2D2D;
-            border: 1px solid #454545;
-            border-radius: 5px;
-            padding: 5px;
-            color: #E0E0E0;
-        }
-        QPushButton {
-            background-color: #2D2D2D;
-            border: 1px solid #454545;
-            border-radius: 5px;
-            padding: 5px 10px;
-        }
-        QPushButton:hover {
-            background-color: #3D3D3D;
-        }
-        QPushButton:pressed {
-            background-color: #1AD6C9;
-            color: #191919;
-        }
-        QListWidget {
-            background-color: #2D2D2D;
-            border: 1px solid #454545;
-            border-radius: 5px;
-        }
-        QListWidget::item {
-            padding: 10px;
-        }
-        QListWidget::item:hover {
-            background-color: #3D3D3D;
-        }
-        QListWidget::item:selected {
-            background-color: #1AD6C9;
-            color: #191919;
-        }
-        QSlider::groove:horizontal {
-            border: 1px solid #454545;
-            height: 4px;
-            background: #3D3D3D;
-            margin: 2px 0;
-            border-radius: 2px;
-        }
-        QSlider::handle:horizontal {
-            background: #1AD6C9;
-            border: 1px solid #1AD6C9;
-            width: 12px;
-            margin: -4px 0;
-            border-radius: 6px;
-        }
-        QSlider::sub-page:horizontal {
-            background: #1AD6C9;
-            border: 1px solid #454545;
-            height: 4px;
-            border-radius: 2px;
-        }
-        QSlider::groove:vertical {
-            border: 1px solid #454545;
-            width: 4px;
-            background: #3D3D3D;
-            margin: 0 2px;
-            border-radius: 2px;
-        }
-        QSlider::handle:vertical {
-            background: #1AD6C9;
-            border: 1px solid #1AD6C9;
-            height: 12px;
-            margin: 0 -4px;
-            border-radius: 6px;
-        }
-        QSlider::add-page:vertical {
-            background: #1AD6C9;
-            border: 1px solid #454545;
-            width: 4px;
-            border-radius: 2px;
-        }
-        QMenu {
-            background-color: #2D2D2D;
-            border: 1px solid #454545;
-        }
-    )";
-    this->setStyleSheet(styleSheet);
+    setWidgetStyle(currentBackgroundColor);
 
     // --- 后端对象初始化 ---
     mediaPlayer = new QMediaPlayer(this);
@@ -355,8 +276,11 @@ void Widget::onSongDetailFinished(const QJsonDocument &json)
 void Widget::onImageDownloaded(const QByteArray &data)
 {
     QPixmap pixmap;
-    pixmap.loadFromData(data);
-    albumArtLabel->setPixmap(pixmap);
+    if (pixmap.loadFromData(data)) {
+        albumArtLabel->setPixmap(pixmap);
+        QColor dominantColor = extractDominantColor(pixmap);
+        updateBackgroundColor(dominantColor);
+    }
 }
 
 void Widget::onSongUrlReady(const QUrl &url)
@@ -456,6 +380,11 @@ void Widget::playSong(qint64 id)
     if (id <= 0) return;
 
     currentPlayingSongId = id; // 更新当前播放的歌曲ID
+
+    // 重置UI
+    albumArtLabel->setPixmap(QPixmap());
+    lyricLabel->setText("歌词加载中...");
+    updateBackgroundColor(QColor(51, 51, 51));
 
     // 请求播放链接
     apiManager->getSongUrl(id);
@@ -561,4 +490,140 @@ void Widget::parseLyrics(const QString &lyricText)
             lyricData.insert(time, text);
         }
     }
+}
+
+// --- 动态背景 ---
+
+QColor Widget::getWidgetBackgroundColor() const
+{
+    return currentBackgroundColor;
+}
+
+QColor Widget::extractDominantColor(const QPixmap &pixmap)
+{
+    if (pixmap.isNull()) {
+        return QColor(51, 51, 51); // 返回默认颜色
+    }
+    // 将图片缩放到1x1像素来获取平均颜色
+    QImage image = pixmap.toImage().scaled(1, 1, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+    return image.pixelColor(0, 0);
+}
+
+bool Widget::isColorDark(const QColor &color) const
+{
+    // 使用亮度公式判断颜色深浅
+    return (0.299 * color.red() + 0.587 * color.green() + 0.114 * color.blue()) < 128;
+}
+
+void Widget::setWidgetStyle(const QColor &color)
+{
+    currentBackgroundColor = color; // 更新当前颜色
+
+    QString foregroundColor = isColorDark(color) ? "#E0E0E0" : "#212121";
+    QString darkerColor = color.darker(150).name();
+
+    // 重建样式表
+    QString styleSheet = QString(R"(
+        QWidget {
+            background-color: transparent; 
+            color: %1;
+            font-family: 'Microsoft YaHei';
+        }
+        QLineEdit {
+            background-color: rgba(0, 0, 0, 0.2);
+            border: 1px solid %1;
+            border-radius: 5px;
+            padding: 5px;
+            color: %1;
+        }
+        QPushButton {
+            background-color: rgba(0, 0, 0, 0.2);
+            border: 1px solid %1;
+            border-radius: 5px;
+            padding: 5px 10px;
+        }
+        QPushButton:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        QPushButton:pressed {
+            background-color: %1;
+            color: %2;
+        }
+        QListWidget {
+            background-color: rgba(0, 0, 0, 0.2);
+            border: 1px solid %1;
+            border-radius: 5px;
+        }
+        QListWidget::item {
+            padding: 10px;
+            background-color: transparent;
+        }
+        QListWidget::item:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        QListWidget::item:selected {
+            background-color: %1;
+            color: %2;
+        }
+        QSlider::groove:horizontal {
+            border: 1px solid #454545;
+            height: 4px;
+            background: #3D3D3D;
+            margin: 2px 0;
+            border-radius: 2px;
+        }
+        QSlider::handle:horizontal {
+            background: %1;
+            border: 1px solid %1;
+            width: 12px;
+            margin: -4px 0;
+            border-radius: 6px;
+        }
+        QSlider::sub-page:horizontal {
+            background: %1;
+            border: 1px solid #454545;
+            height: 4px;
+            border-radius: 2px;
+        }
+        QSlider::groove:vertical {
+            border: 1px solid #454545;
+            width: 4px;
+            background: #3D3D3D;
+            margin: 0 2px;
+            border-radius: 2px;
+        }
+        QSlider::handle:vertical {
+            background: %1;
+            border: 1px solid %1;
+            height: 12px;
+            margin: 0 -4px;
+            border-radius: 6px;
+        }
+        QSlider::add-page:vertical {
+            background: %1;
+            border: 1px solid #454545;
+            width: 4px;
+            border-radius: 2px;
+        }
+        QMenu {
+            background-color: %3;
+            border: 1px solid %1;
+        }
+    )").arg(foregroundColor, color.name(), darkerColor);
+
+    QString mainWidgetStyle = QString(
+        "QWidget#mainWidget { background-color: qradialgradient(cx: 0.5, cy: 0.5, radius: 1.2, fx: 0.5, fy: 0.5, stop: 0 %1, stop: 1 %2); }"
+    ).arg(color.name(), darkerColor);
+    
+    this->setStyleSheet(styleSheet + mainWidgetStyle);
+}
+
+void Widget::updateBackgroundColor(const QColor &newColor)
+{
+    if (backgroundAnimation->state() == QAbstractAnimation::Running) {
+        backgroundAnimation->stop();
+    }
+    backgroundAnimation->setStartValue(currentBackgroundColor);
+    backgroundAnimation->setEndValue(newColor);
+    backgroundAnimation->start();
 }

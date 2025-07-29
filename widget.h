@@ -5,6 +5,7 @@
 #include <QJsonDocument>
 #include <QMediaPlayer>
 #include <QMap>
+#include <QPropertyAnimation>
 #include "playlistmanager.h" // 引入播放列表管理器
 
 // 前置声明
@@ -26,6 +27,7 @@ class QWidgetAction;
 class Widget : public QWidget
 {
     Q_OBJECT
+    Q_PROPERTY(QColor widgetBackgroundColor READ getWidgetBackgroundColor WRITE setWidgetStyle)
 
 public:
     Widget(QWidget *parent = nullptr);
@@ -68,10 +70,17 @@ private slots:
     // 视图切换
     void onMainStackCurrentChanged(int index);
 
+    QColor getWidgetBackgroundColor() const;
 
 private:
     void playSong(qint64 id); // 新增一个统一的播放歌曲函数
     void parseLyrics(const QString &lyricText);
+
+    // 动态背景
+    QColor extractDominantColor(const QPixmap &pixmap);
+    void updateBackgroundColor(const QColor &color);
+    bool isColorDark(const QColor &color) const;
+    void setWidgetStyle(const QColor &color);
 
     // UI 元素
     QLineEdit *searchInput;
@@ -124,5 +133,9 @@ private:
     QString currentSearchKeywords;
     int currentPage;
     qint64 currentPlayingSongId;
+
+    // 动态背景
+    QPropertyAnimation *backgroundAnimation;
+    QColor currentBackgroundColor;
 };
 #endif // WIDGET_H
