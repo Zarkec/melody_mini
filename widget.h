@@ -5,6 +5,7 @@
 #include <QJsonDocument>
 #include <QMediaPlayer>
 #include <QMap>
+#include "playlistmanager.h" // 引入播放列表管理器
 
 // 前置声明
 class QLineEdit;
@@ -18,6 +19,7 @@ class QVBoxLayout;
 class QStackedWidget;
 class QAudioOutput;
 class ApiManager;
+class PlaylistManager;
 
 class Widget : public QWidget
 {
@@ -44,8 +46,16 @@ private slots:
     void updateDuration(qint64 duration);
     void updateState(QMediaPlayer::PlaybackState state);
     void setPosition(int position);
+    void onMediaStatusChanged(QMediaPlayer::MediaStatus status);
+
+    // 新增：播放控制
+    void playNextSong();
+    void playPreviousSong();
+    void changePlayMode();
+
 
 private:
+    void playSong(qint64 id); // 新增一个统一的播放歌曲函数
     void parseLyrics(const QString &lyricText);
 
     // UI 元素
@@ -55,6 +65,7 @@ private:
     QPushButton *playPauseButton;
     QPushButton *prevButton;
     QPushButton *nextButton;
+    QPushButton *playModeButton; // 新增播放模式按钮
     QSlider *progressSlider;
     QLabel *timeLabel;
     QSlider *volumeSlider;
@@ -77,6 +88,10 @@ private:
 
     // API管理器
     ApiManager *apiManager;
+
+    // 播放列表管理器
+    PlaylistManager *playlistManager;
+    QVector<Song> searchResultSongs; // 存储搜索结果歌曲列表
     
     // 歌词数据
     QMap<qint64, QString> lyricData;

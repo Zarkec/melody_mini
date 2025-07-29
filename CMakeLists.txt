@@ -12,6 +12,8 @@ qt_add_executable(melody
     widget.h
     apimanager.cpp
     apimanager.h
+    playlistmanager.cpp
+    playlistmanager.h
 )
 
 target_link_libraries(melody

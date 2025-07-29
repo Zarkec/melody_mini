@@ -1,5 +1,6 @@
 #include "widget.h"
 #include "apimanager.h"
+#include "playlistmanager.h" // 集成播放列表
 #include <QLineEdit>
 #include <QPushButton>
 #include <QListWidget>
@@ -21,6 +22,8 @@
 Widget::Widget(QWidget *parent)
     : QWidget(parent), currentDuration(0)
 {
+    // --- 新增：播放列表管理器初始化 ---
+    playlistManager = new PlaylistManager(this);
     // --- UI 控件初始化 ---
     searchInput = new QLineEdit;
     searchInput->setPlaceholderText("输入歌名或歌手...");
@@ -29,6 +32,8 @@ Widget::Widget(QWidget *parent)
     playPauseButton = new QPushButton("▶");
     prevButton = new QPushButton("⏮");
     nextButton = new QPushButton("⏭");
+    playModeButton = new QPushButton("顺序"); // 初始化播放模式按钮
+    playModeButton->setFixedWidth(80);
     progressSlider = new QSlider(Qt::Horizontal);
     timeLabel = new QLabel("00:00 / 00:00");
     volumeSlider = new QSlider(Qt::Horizontal);
@@ -67,6 +72,7 @@ Widget::Widget(QWidget *parent)
     bottomLayout->addWidget(prevButton);
     bottomLayout->addWidget(playPauseButton);
     bottomLayout->addWidget(nextButton);
+    bottomLayout->addWidget(playModeButton); // 添加到布局
     bottomLayout->addWidget(progressSlider);
     bottomLayout->addWidget(timeLabel);
     bottomLayout->addWidget(new QLabel("音量:"));
@@ -170,7 +176,13 @@ Widget::Widget(QWidget *parent)
     connect(mediaPlayer, &QMediaPlayer::positionChanged, this, &Widget::updatePosition);
     connect(mediaPlayer, &QMediaPlayer::durationChanged, this, &Widget::updateDuration);
     connect(mediaPlayer, &QMediaPlayer::playbackStateChanged, this, &Widget::updateState);
+    connect(mediaPlayer, &QMediaPlayer::mediaStatusChanged, this, &Widget::onMediaStatusChanged); // 监听播放结束
     connect(progressSlider, &QSlider::sliderMoved, this, &Widget::setPosition);
+
+    // 新增：连接上一曲/下一曲/播放模式按钮
+    connect(prevButton, &QPushButton::clicked, this, &Widget::playPreviousSong);
+    connect(nextButton, &QPushButton::clicked, this, &Widget::playNextSong);
+    connect(playModeButton, &QPushButton::clicked, this, &Widget::changePlayMode);
 }
 
 Widget::~Widget() {}
@@ -191,6 +203,9 @@ void Widget::onSearchFinished(const QJsonDocument &json)
 {
     searchButton->setEnabled(true);
     searchButton->setText("搜索");
+
+    searchResultSongs.clear(); // 清空旧的搜索结果
+
     QJsonObject rootObj = json.object();
     if (rootObj.contains("result")) {
         QJsonObject resultObj = rootObj["result"].toObject();
@@ -198,15 +213,24 @@ void Widget::onSearchFinished(const QJsonDocument &json)
             QJsonArray songsArray = resultObj["songs"].toArray();
             for (const QJsonValue &value : songsArray) {
                 QJsonObject songObj = value.toObject();
+                
                 QString songName = songObj["name"].toString();
                 QString artistName;
                 if (!songObj["artists"].toArray().isEmpty()) {
                     artistName = songObj["artists"].toArray()[0].toObject()["name"].toString();
                 }
+                qint64 songId = songObj["id"].toVariant().toLongLong();
+
+                // 添加到UI列表
                 QListWidgetItem *item = new QListWidgetItem(QString("%1 - %2").arg(songName, artistName));
-                item->setData(Qt::UserRole, songObj["id"].toVariant());
+                item->setData(Qt::UserRole, songId);
                 resultList->addItem(item);
+
+                // 添加到歌曲结构体列表
+                searchResultSongs.append({songId, songName, artistName});
             }
+            // 将完整的搜索结果列表交给播放列表管理器
+            playlistManager->addSongs(searchResultSongs);
         }
     }
 }
@@ -229,7 +253,7 @@ void Widget::onSongDetailFinished(const QJsonDocument &json)
         if (!songsArray.isEmpty()) {
             QJsonObject songObj = songsArray[0].toObject();
             if (songObj.contains("album")) {
-                QString imageUrl = songObj["album"].toObject()["picUrl"].toString() + "?param=300y300";
+                QString imageUrl = songObj["album"].toObject()["picUrl"].toString() + "?param=800y800";
                 apiManager->downloadImage(QUrl(imageUrl));
             }
         }
@@ -258,17 +282,13 @@ void Widget::onApiError(const QString &errorString)
 
 void Widget::onResultItemDoubleClicked(QListWidgetItem *item)
 {
-    qint64 songId = item->data(Qt::UserRole).toLongLong();
+    int index = resultList->row(item);
+    playlistManager->setCurrentIndex(index);
     
-    // 请求播放链接
-    apiManager->getSongUrl(songId);
-
-    // 获取歌词和详情
-    apiManager->getLyric(songId);
-    apiManager->getSongDetail(songId);
-
-    // 切换到播放详情页
-    mainStackedWidget->setCurrentWidget(playerPage);
+    Song currentSong = playlistManager->getCurrentSong();
+    if (currentSong.id != -1) {
+        playSong(currentSong.id);
+    }
 }
 
 void Widget::onPlayPauseButtonClicked()
@@ -321,6 +341,73 @@ void Widget::updateState(QMediaPlayer::PlaybackState state)
 void Widget::setPosition(int position)
 {
     mediaPlayer->setPosition(position);
+}
+
+// --- 新增的私有和槽函数实现 ---
+
+void Widget::playSong(qint64 id)
+{
+    if (id <= 0) return;
+
+    // 请求播放链接
+    apiManager->getSongUrl(id);
+
+    // 获取歌词和详情
+    apiManager->getLyric(id);
+    apiManager->getSongDetail(id);
+
+    // 切换到播放详情页
+    mainStackedWidget->setCurrentWidget(playerPage);
+}
+
+void Widget::onMediaStatusChanged(QMediaPlayer::MediaStatus status)
+{
+    // 当歌曲播放结束时，自动播放下一首
+    if (status == QMediaPlayer::EndOfMedia) {
+        playNextSong();
+    }
+}
+
+void Widget::playNextSong()
+{
+    if (playlistManager->isEmpty()) return;
+
+    Song nextSong = playlistManager->getNextSong();
+    if (nextSong.id != -1) {
+        playSong(nextSong.id);
+    }
+}
+
+void Widget::playPreviousSong()
+{
+    if (playlistManager->isEmpty()) return;
+
+    Song prevSong = playlistManager->getPreviousSong();
+    if (prevSong.id != -1) {
+        playSong(prevSong.id);
+    }
+}
+
+void Widget::changePlayMode()
+{
+    PlaylistManager::PlayMode currentMode = playlistManager->getPlayMode();
+    // 循环切换模式
+    int nextModeIndex = (static_cast<int>(currentMode) + 1) % 3;
+    PlaylistManager::PlayMode nextMode = static_cast<PlaylistManager::PlayMode>(nextModeIndex);
+    playlistManager->setPlayMode(nextMode);
+
+    // 更新UI图标和提示
+    switch(nextMode) {
+        case PlaylistManager::Sequential:
+            playModeButton->setText("顺序播放");
+            break;
+        case PlaylistManager::LoopOne:
+            playModeButton->setText("单曲循环");
+            break;
+        case PlaylistManager::Random:
+            playModeButton->setText("随机播放");
+            break;
+    }
 }
 
 void Widget::parseLyrics(const QString &lyricText)
