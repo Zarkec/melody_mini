@@ -26,6 +26,11 @@ Widget::Widget(QWidget *parent)
 {
     // --- 新增：播放列表管理器初始化 ---
     playlistManager = new PlaylistManager(this);
+
+    // --- 业务逻辑变量初始化 ---
+    currentPage = 1;
+    currentPlayingSongId = -1;
+
     // --- UI 控件初始化 ---
     searchInput = new QLineEdit;
     searchInput->setPlaceholderText("输入歌名或歌手...");
@@ -38,6 +43,14 @@ Widget::Widget(QWidget *parent)
     playModeButton->setFixedWidth(80);
     progressSlider = new QSlider(Qt::Horizontal);
     timeLabel = new QLabel("00:00 / 00:00");
+
+    // --- 分页控件 ---
+    paginationWidget = new QWidget;
+    prevPageButton = new QPushButton("< 上一页");
+    nextPageButton = new QPushButton("下一页 >");
+    pageLabel = new QLabel("第 1 页");
+    prevPageButton->setEnabled(false); // 初始时禁用
+    nextPageButton->setEnabled(false); // 初始时禁用
 
     // --- 音量控制 ---
     volumeButton = new QPushButton("🔊"); // 使用Emoji作为图标
@@ -66,7 +79,13 @@ Widget::Widget(QWidget *parent)
     lyricFont.setPointSize(14);
     lyricLabel->setFont(lyricFont);
 
+    backButton = new QPushButton("返回");
+
     QVBoxLayout *playerPageLayout = new QVBoxLayout(playerPage);
+    QHBoxLayout *playerTopLayout = new QHBoxLayout();
+    playerTopLayout->addWidget(backButton);
+    playerTopLayout->addStretch();
+    playerPageLayout->addLayout(playerTopLayout);
     playerPageLayout->addWidget(albumArtLabel, 0, Qt::AlignCenter);
     playerPageLayout->addWidget(lyricLabel);
 
@@ -74,12 +93,20 @@ Widget::Widget(QWidget *parent)
     mainStackedWidget = new QStackedWidget;
     mainStackedWidget->addWidget(resultList);
     mainStackedWidget->addWidget(playerPage);
-    mainStackedWidget->setCurrentWidget(playerPage); // 默认显示播放页
+    mainStackedWidget->setCurrentWidget(resultList); // 默认显示搜索页
 
     // --- 布局设置 ---
     topLayout = new QHBoxLayout;
     topLayout->addWidget(searchInput);
     topLayout->addWidget(searchButton);
+
+    paginationLayout = new QHBoxLayout(paginationWidget);
+    paginationLayout->addStretch();
+    paginationLayout->addWidget(prevPageButton);
+    paginationLayout->addWidget(pageLabel);
+    paginationLayout->addWidget(nextPageButton);
+    paginationLayout->addStretch();
+    paginationWidget->setLayout(paginationLayout);
 
     bottomLayout = new QHBoxLayout;
     bottomLayout->addWidget(prevButton);
@@ -93,6 +120,7 @@ Widget::Widget(QWidget *parent)
     mainLayout = new QVBoxLayout(this);
     mainLayout->addLayout(topLayout);
     mainLayout->addWidget(mainStackedWidget);
+    mainLayout->addWidget(paginationWidget); // 添加分页控件容器
     mainLayout->addLayout(bottomLayout);
 
     setLayout(mainLayout);
@@ -196,6 +224,10 @@ Widget::Widget(QWidget *parent)
     apiManager = new ApiManager(this);
 
     // --- 信号与槽连接 ---
+    connect(mainStackedWidget, &QStackedWidget::currentChanged, this, &Widget::onMainStackCurrentChanged);
+    connect(backButton, &QPushButton::clicked, this, &Widget::onBackButtonClicked);
+    connect(prevPageButton, &QPushButton::clicked, this, &Widget::onPrevPageButtonClicked);
+    connect(nextPageButton, &QPushButton::clicked, this, &Widget::onNextPageButtonClicked);
     connect(searchButton, &QPushButton::clicked, this, &Widget::onSearchButtonClicked);
     connect(searchInput, &QLineEdit::returnPressed, this, &Widget::onSearchButtonClicked);
     connect(apiManager, &ApiManager::searchFinished, this, &Widget::onSearchFinished);
@@ -226,13 +258,14 @@ Widget::~Widget() {}
 
 void Widget::onSearchButtonClicked()
 {
-    QString keywords = searchInput->text();
-    if (!keywords.isEmpty()) {
+    currentSearchKeywords = searchInput->text();
+    if (!currentSearchKeywords.isEmpty()) {
+        currentPage = 1; // 每次新搜索都重置为第一页
         mainStackedWidget->setCurrentWidget(resultList);
-        resultList->clear();
         searchButton->setEnabled(false);
         searchButton->setText("搜索中...");
-        apiManager->searchSongs(keywords);
+        // 调用带分页参数的搜索
+        apiManager->searchSongs(currentSearchKeywords, 15, (currentPage - 1) * 15);
     }
 }
 
@@ -240,14 +273,22 @@ void Widget::onSearchFinished(const QJsonDocument &json)
 {
     searchButton->setEnabled(true);
     searchButton->setText("搜索");
+    resultList->clear(); // 清空列表
 
-    searchResultSongs.clear(); // 清空旧的搜索结果
+    searchResultSongs.clear(); // 清空旧的歌曲数据
 
     QJsonObject rootObj = json.object();
+    int totalSongCount = 0;
     if (rootObj.contains("result")) {
         QJsonObject resultObj = rootObj["result"].toObject();
+        if (resultObj.contains("songCount")) {
+            totalSongCount = resultObj["songCount"].toInt();
+        }
         if (resultObj.contains("songs")) {
             QJsonArray songsArray = resultObj["songs"].toArray();
+            if (songsArray.isEmpty() && currentPage == 1) {
+                QMessageBox::information(this, "无结果", "未找到相关歌曲。");
+            }
             for (const QJsonValue &value : songsArray) {
                 QJsonObject songObj = value.toObject();
                 
@@ -258,18 +299,21 @@ void Widget::onSearchFinished(const QJsonDocument &json)
                 }
                 qint64 songId = songObj["id"].toVariant().toLongLong();
 
-                // 添加到UI列表
                 QListWidgetItem *item = new QListWidgetItem(QString("%1 - %2").arg(songName, artistName));
                 item->setData(Qt::UserRole, songId);
                 resultList->addItem(item);
 
-                // 添加到歌曲结构体列表
                 searchResultSongs.append({songId, songName, artistName});
             }
-            // 将完整的搜索结果列表交给播放列表管理器
             playlistManager->addSongs(searchResultSongs);
         }
     }
+
+    // 更新分页控件状态
+    int totalPages = (totalSongCount > 0) ? (totalSongCount + 14) / 15 : 0;
+    pageLabel->setText(QString("第 %1 / %2 页").arg(totalPages > 0 ? currentPage : 0).arg(totalPages));
+    prevPageButton->setEnabled(currentPage > 1);
+    nextPageButton->setEnabled(currentPage < totalPages);
 }
 
 void Widget::onVolumeButtonClicked()
@@ -328,14 +372,28 @@ void Widget::onApiError(const QString &errorString)
     QMessageBox::critical(this, "网络错误", errorString);
 }
 
+void Widget::onBackButtonClicked()
+{
+    mainStackedWidget->setCurrentWidget(resultList);
+}
+
 void Widget::onResultItemDoubleClicked(QListWidgetItem *item)
 {
-    int index = resultList->row(item);
-    playlistManager->setCurrentIndex(index);
-    
-    Song currentSong = playlistManager->getCurrentSong();
-    if (currentSong.id != -1) {
-        playSong(currentSong.id);
+    qint64 clickedSongId = item->data(Qt::UserRole).toLongLong();
+
+    // 检查点击的歌曲是否就是当前正在播放的歌曲
+    if (clickedSongId == currentPlayingSongId && mediaPlayer->playbackState() != QMediaPlayer::StoppedState) {
+        // 如果是，并且播放器不是停止状态，则只切换回播放界面
+        mainStackedWidget->setCurrentWidget(playerPage);
+    } else {
+        // 否则，按正常流程播放新歌曲
+        int index = resultList->row(item);
+        playlistManager->setCurrentIndex(index);
+        
+        Song currentSong = playlistManager->getCurrentSong();
+        if (currentSong.id != -1) {
+            playSong(currentSong.id);
+        }
     }
 }
 
@@ -397,6 +455,8 @@ void Widget::playSong(qint64 id)
 {
     if (id <= 0) return;
 
+    currentPlayingSongId = id; // 更新当前播放的歌曲ID
+
     // 请求播放链接
     apiManager->getSongUrl(id);
 
@@ -412,6 +472,7 @@ void Widget::onMediaStatusChanged(QMediaPlayer::MediaStatus status)
 {
     // 当歌曲播放结束时，自动播放下一首
     if (status == QMediaPlayer::EndOfMedia) {
+        currentPlayingSongId = -1; // 播放结束，重置ID
         playNextSong();
     }
 }
@@ -456,6 +517,31 @@ void Widget::changePlayMode()
             playModeButton->setText("随机播放");
             break;
     }
+}
+
+void Widget::onPrevPageButtonClicked()
+{
+    if (currentPage > 1) {
+        currentPage--;
+        searchButton->setEnabled(false);
+        searchButton->setText("加载中...");
+        apiManager->searchSongs(currentSearchKeywords, 15, (currentPage - 1) * 15);
+    }
+}
+
+void Widget::onNextPageButtonClicked()
+{
+    // 这里的总页数判断依赖于 onSearchFinished 的结果
+    currentPage++;
+    searchButton->setEnabled(false);
+    searchButton->setText("加载中...");
+    apiManager->searchSongs(currentSearchKeywords, 15, (currentPage - 1) * 15);
+}
+
+void Widget::onMainStackCurrentChanged(int index)
+{
+    // index 0: resultList, index 1: playerPage
+    paginationWidget->setVisible(index == 0);
 }
 
 void Widget::parseLyrics(const QString &lyricText)

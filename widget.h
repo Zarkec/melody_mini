@@ -58,6 +58,16 @@ private slots:
     // 音量控制
     void onVolumeButtonClicked();
 
+    // UI控制
+    void onBackButtonClicked();
+
+    // 分页控制
+    void onPrevPageButtonClicked();
+    void onNextPageButtonClicked();
+
+    // 视图切换
+    void onMainStackCurrentChanged(int index);
+
 
 private:
     void playSong(qint64 id); // 新增一个统一的播放歌曲函数
@@ -67,6 +77,10 @@ private:
     QLineEdit *searchInput;
     QPushButton *searchButton;
     QListWidget *resultList;
+    QPushButton *prevPageButton;
+    QPushButton *nextPageButton;
+    QLabel *pageLabel;
+    QWidget *paginationWidget; // 分页控件容器
     QPushButton *playPauseButton;
     QPushButton *prevButton;
     QPushButton *nextButton;
@@ -77,6 +91,7 @@ private:
     QPushButton *volumeButton; // 新增音量按钮
     QMenu *volumeMenu;         // 新增音量菜单
     QWidgetAction *volumeAction; // 用于将Slider放入Menu
+    QPushButton *backButton; // 新增返回按钮
 
     // 播放详情页
     QStackedWidget *mainStackedWidget;
@@ -87,6 +102,7 @@ private:
     // 布局
     QVBoxLayout *mainLayout;
     QHBoxLayout *topLayout;
+    QHBoxLayout *paginationLayout;
     QHBoxLayout *bottomLayout;
 
     // 媒体播放器
@@ -103,5 +119,10 @@ private:
     
     // 歌词数据
     QMap<qint64, QString> lyricData;
+
+    // 搜索与分页
+    QString currentSearchKeywords;
+    int currentPage;
+    qint64 currentPlayingSongId;
 };
 #endif // WIDGET_H
