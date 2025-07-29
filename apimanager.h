@@ -6,6 +6,7 @@
 #include <QNetworkAccessManager>
 #include <QJsonDocument>
 #include <QNetworkReply>
+#include <QUrl>
 
 class ApiManager : public QObject
 {
@@ -17,12 +18,14 @@ public:
     void getLyric(qint64 songId);
     void getSongDetail(qint64 songId);
     void downloadImage(const QUrl &url);
+    void getSongUrl(qint64 songId);
 
 signals:
     void searchFinished(const QJsonDocument &json);
     void lyricFinished(const QJsonDocument &json);
     void songDetailFinished(const QJsonDocument &json);
     void imageDownloaded(const QByteArray &data);
+    void songUrlReady(const QUrl &url);
     void error(const QString &errorString);
 
 private slots:
@@ -30,6 +33,7 @@ private slots:
     void onLyricReplyFinished(QNetworkReply *reply);
     void onSongDetailReplyFinished(QNetworkReply *reply);
     void onImageReplyFinished(QNetworkReply *reply);
+    void onSongUrlReplyFinished(QNetworkReply *reply);
 
 private:
     QNetworkAccessManager *manager;

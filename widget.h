@@ -34,6 +34,7 @@ private slots:
     void onLyricFinished(const QJsonDocument &json);
     void onSongDetailFinished(const QJsonDocument &json);
     void onImageDownloaded(const QByteArray &data);
+    void onSongUrlReady(const QUrl &url);
     void onApiError(const QString &errorString);
 
     // 播放器相关

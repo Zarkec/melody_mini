@@ -60,6 +60,18 @@ void ApiManager::downloadImage(const QUrl &url)
     connect(reply, &QNetworkReply::finished, this, [this, reply](){ onImageReplyFinished(reply); });
 }
 
+void ApiManager::getSongUrl(qint64 songId)
+{
+    QUrl url("https://musicbox-web-api.mu-jie.cc/wyy/mp3");
+    QUrlQuery query;
+    query.addQueryItem("rid", QString::number(songId));
+    url.setQuery(query);
+
+    QNetworkRequest request(url);
+    QNetworkReply *reply = manager->get(request);
+    connect(reply, &QNetworkReply::finished, this, [this, reply](){ onSongUrlReplyFinished(reply); });
+}
+
 void ApiManager::onSearchReplyFinished(QNetworkReply *reply)
 {
     if (reply->error() != QNetworkReply::NoError) {
@@ -96,6 +108,22 @@ void ApiManager::onImageReplyFinished(QNetworkReply *reply)
         emit error(reply->errorString());
     } else {
         emit imageDownloaded(reply->readAll());
+    }
+    reply->deleteLater();
+}
+
+void ApiManager::onSongUrlReplyFinished(QNetworkReply *reply)
+{
+    if (reply->error() != QNetworkReply::NoError) {
+        emit error(reply->errorString());
+    } else {
+        QByteArray responseData = reply->readAll();
+        QString onlineUrl = QString::fromUtf8(responseData);
+        if (!onlineUrl.isEmpty()) {
+            emit songUrlReady(QUrl(onlineUrl));
+        } else {
+            emit error("无法解析歌曲链接");
+        }
     }
     reply->deleteLater();
 }

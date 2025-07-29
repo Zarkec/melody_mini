@@ -155,10 +155,12 @@ Widget::Widget(QWidget *parent)
 
     // --- 信号与槽连接 ---
     connect(searchButton, &QPushButton::clicked, this, &Widget::onSearchButtonClicked);
+    connect(searchInput, &QLineEdit::returnPressed, this, &Widget::onSearchButtonClicked);
     connect(apiManager, &ApiManager::searchFinished, this, &Widget::onSearchFinished);
     connect(apiManager, &ApiManager::lyricFinished, this, &Widget::onLyricFinished);
     connect(apiManager, &ApiManager::songDetailFinished, this, &Widget::onSongDetailFinished);
     connect(apiManager, &ApiManager::imageDownloaded, this, &Widget::onImageDownloaded);
+    connect(apiManager, &ApiManager::songUrlReady, this, &Widget::onSongUrlReady);
     connect(apiManager, &ApiManager::error, this, &Widget::onApiError);
     connect(resultList, &QListWidget::itemDoubleClicked, this, &Widget::onResultItemDoubleClicked);
     connect(playPauseButton, &QPushButton::clicked, this, &Widget::onPlayPauseButtonClicked);
@@ -241,6 +243,12 @@ void Widget::onImageDownloaded(const QByteArray &data)
     albumArtLabel->setPixmap(pixmap);
 }
 
+void Widget::onSongUrlReady(const QUrl &url)
+{
+    mediaPlayer->setSource(url);
+    mediaPlayer->play();
+}
+
 void Widget::onApiError(const QString &errorString)
 {
     searchButton->setEnabled(true);
@@ -252,10 +260,8 @@ void Widget::onResultItemDoubleClicked(QListWidgetItem *item)
 {
     qint64 songId = item->data(Qt::UserRole).toLongLong();
     
-    // 获取播放链接并播放
-    QString urlString = QString("https://music.163.com/song/media/outer/url?id=%1.mp3").arg(songId);
-    mediaPlayer->setSource(QUrl(urlString));
-    mediaPlayer->play();
+    // 请求播放链接
+    apiManager->getSongUrl(songId);
 
     // 获取歌词和详情
     apiManager->getLyric(songId);
