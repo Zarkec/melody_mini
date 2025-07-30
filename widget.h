@@ -124,7 +124,6 @@ private:
     QVBoxLayout *mainLayout;
     QHBoxLayout *topLayout;
     QHBoxLayout *paginationLayout;
-    QHBoxLayout *bottomLayout;
 
     // 媒体播放器
     QMediaPlayer *mediaPlayer;

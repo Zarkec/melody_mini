@@ -63,7 +63,6 @@ Widget::Widget(QWidget *parent)
 
     // --- 音量控制 ---
     volumeButton = new QPushButton("🔊"); // 使用Emoji作为图标
-    volumeButton->setFixedSize(35, 35);
     volumeButton->setFlat(true); // 使按钮看起来更像一个图标
 
     volumeSlider = new QSlider(Qt::Vertical); // 设置为垂直
@@ -119,20 +118,32 @@ Widget::Widget(QWidget *parent)
     paginationLayout->addStretch();
     paginationWidget->setLayout(paginationLayout);
 
-    bottomLayout = new QHBoxLayout;
-    bottomLayout->addWidget(prevButton);
-    bottomLayout->addWidget(playPauseButton);
-    bottomLayout->addWidget(nextButton);
-    bottomLayout->addWidget(playModeButton); // 添加到布局
-    bottomLayout->addWidget(progressSlider);
-    bottomLayout->addWidget(timeLabel);
-    bottomLayout->addWidget(volumeButton); // 添加新的音量按钮
+    // --- 底部控制区布局 ---
+    // 第一行：进度条和时间
+    QHBoxLayout *progressLayout = new QHBoxLayout;
+    progressLayout->addWidget(progressSlider);
+    progressLayout->addWidget(timeLabel);
+
+    // 第二行：控制按钮
+    QHBoxLayout *controlsLayout = new QHBoxLayout;
+    controlsLayout->addWidget(playModeButton);
+    controlsLayout->addStretch();
+    controlsLayout->addWidget(prevButton);
+    controlsLayout->addWidget(playPauseButton);
+    controlsLayout->addWidget(nextButton);
+    controlsLayout->addStretch();
+    controlsLayout->addWidget(volumeButton);
+
+    // 垂直整合底部所有控件
+    QVBoxLayout *bottomContainerLayout = new QVBoxLayout;
+    bottomContainerLayout->addLayout(progressLayout);
+    bottomContainerLayout->addLayout(controlsLayout);
 
     mainLayout = new QVBoxLayout(this);
     mainLayout->addLayout(topLayout);
     mainLayout->addWidget(mainStackedWidget);
     mainLayout->addWidget(paginationWidget); // 添加分页控件容器
-    mainLayout->addLayout(bottomLayout);
+    mainLayout->addLayout(bottomContainerLayout);
 
     setLayout(mainLayout);
     setWindowTitle("Melody");
