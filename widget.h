@@ -11,6 +11,9 @@
 #include <QSystemTrayIcon>
 #include "playlistmanager.h" // 引入播放列表管理器
 
+// 搜索源枚举声明
+enum class SearchSource;
+
 // 前置声明
 class QLineEdit;
 class QPushButton;
@@ -27,6 +30,7 @@ class PlaylistManager;
 class QMenu;
 class QWidgetAction;
 class QAction;
+class QComboBox;
 
 class Widget : public QWidget
 {
@@ -38,13 +42,20 @@ public:
     ~Widget();
 
 private slots:
-    // 网络相关
+    // 网络相关 - 网易云音乐
     void onSearchButtonClicked();
     void onSearchFinished(const QJsonDocument &json);
     void onLyricFinished(const QJsonDocument &json);
     void onSongDetailFinished(const QJsonDocument &json);
     void onImageDownloaded(const QByteArray &data);
     void onSongUrlReady(const QUrl &url);
+
+    // 网络相关 - Bilibili
+    void onBilibiliSearchFinished(const QJsonDocument &json);
+    void onBilibiliVideoInfoFinished(const QJsonDocument &json);
+    void onBilibiliAudioUrlReady(const QUrl &url);
+    void onBilibiliImageDownloaded(const QByteArray &data);
+
     void onApiError(const QString &errorString);
 
     // 播放器相关
@@ -60,6 +71,9 @@ private slots:
     void playNextSong();
     void playPreviousSong();
     void changePlayMode();
+
+    // 搜索源切换
+    void onSearchSourceChanged(int index);
 
     // 音量控制
     void onVolumeButtonClicked();
@@ -84,7 +98,8 @@ protected:
     void closeEvent(QCloseEvent *event) override;
 
 private:
-    void playSong(qint64 id); // 新增一个统一的播放歌曲函数
+    void playSong(qint64 id); // 播放网易云音乐歌曲
+    void playBilibiliVideo(const QString &bvid); // 播放Bilibili视频
     void parseLyrics(const QString &lyricText);
 
     // 动态背景
@@ -97,6 +112,7 @@ private:
     QLineEdit *searchInput;
     QPushButton *searchButton;
     QListWidget *resultList;
+    QComboBox *searchSourceCombo; // 搜索源选择
     QPushButton *prevPageButton;
     QPushButton *nextPageButton;
     QLabel *pageLabel;
@@ -144,6 +160,8 @@ private:
     QString currentSearchKeywords;
     int currentPage;
     qint64 currentPlayingSongId;
+    QString currentBvid; // 当前播放的Bilibili视频BV号
+    SearchSource currentSearchSource; // 当前搜索源
 
     // 动态背景
     QPropertyAnimation *backgroundAnimation;

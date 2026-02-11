@@ -5,12 +5,26 @@
 #include <QVector>
 #include <QString>
 
+// 搜索源类型
+enum class SearchSource {
+    NetEase,    // 网易云音乐
+    Bilibili    // Bilibili
+};
+
 // 用于存储歌曲基本信息的结构体
 struct Song
 {
     qint64 id;
     QString name;
     QString artist;
+    // Bilibili特有字段
+    QString bvid;       // Bilibili BV号
+    QString picUrl;     // 封面图URL
+    qint64 cid;         // Bilibili CID
+    int duration;       // 时长（秒）
+    SearchSource source; // 来源平台
+
+    Song() : id(-1), cid(-1), duration(0), source(SearchSource::NetEase) {}
 };
 
 class PlaylistManager : public QObject

@@ -21,6 +21,7 @@
 #include <QMenu>
 #include <QWidgetAction>
 #include <QDebug>
+#include <QComboBox>
 
 Widget::Widget(QWidget *parent)
     : QWidget(parent), currentDuration(0)
@@ -32,6 +33,7 @@ Widget::Widget(QWidget *parent)
     // --- 业务逻辑变量初始化 ---
     currentPage = 1;
     currentPlayingSongId = -1;
+    currentSearchSource = SearchSource::NetEase; // 默认网易云音乐
 
     // --- 动态背景初始化 ---
     currentBackgroundColor = QColor(51, 51, 51);
@@ -46,6 +48,12 @@ Widget::Widget(QWidget *parent)
     backButton = new QPushButton("返回");
     backButton->setVisible(false); // 默认隐藏
     resultList = new QListWidget;
+
+    // 搜索源选择下拉框
+    searchSourceCombo = new QComboBox;
+    searchSourceCombo->addItem("网易云音乐");
+    searchSourceCombo->addItem("Bilibili");
+    searchSourceCombo->setFixedWidth(90);
     playPauseButton = new QPushButton("▶");
     prevButton = new QPushButton("⏮");
     nextButton = new QPushButton("⏭");
@@ -79,6 +87,8 @@ Widget::Widget(QWidget *parent)
     playerPage = new QWidget;
     songNameLabel = new QLabel("歌曲名称"); // 初始化
     songNameLabel->setAlignment(Qt::AlignCenter);
+    songNameLabel->setWordWrap(true);  // 启用自动换行
+    songNameLabel->setMaximumWidth(400);  // 限制最大宽度
     QFont songNameFont = songNameLabel->font();
     songNameFont.setPointSize(16);
     songNameFont.setBold(true);
@@ -86,6 +96,8 @@ Widget::Widget(QWidget *parent)
 
     albumArtLabel = new QLabel;
     albumArtLabel->setScaledContents(true);
+    albumArtLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    albumArtLabel->setAlignment(Qt::AlignCenter);
     lyricLabel = new QLabel("欢迎使用 Melody");
     lyricLabel->setAlignment(Qt::AlignCenter);
     lyricLabel->setWordWrap(true);
@@ -94,19 +106,25 @@ Widget::Widget(QWidget *parent)
     lyricLabel->setFont(lyricFont);
 
     QVBoxLayout *playerPageLayout = new QVBoxLayout(playerPage);
-    playerPageLayout->addWidget(songNameLabel); // 添加到布局
-    playerPageLayout->addWidget(albumArtLabel, 0, Qt::AlignCenter);
-    playerPageLayout->addWidget(lyricLabel);
+    playerPageLayout->addWidget(songNameLabel, 0, Qt::AlignCenter); // 添加到布局
+    playerPageLayout->addWidget(albumArtLabel, 1, Qt::AlignCenter); // 添加stretch因子，让封面占据主要空间
+    playerPageLayout->addWidget(lyricLabel, 0, Qt::AlignCenter);
+    playerPageLayout->setStretch(0, 0); // 歌曲名不拉伸
+    playerPageLayout->setStretch(1, 1); // 封面可拉伸
+    playerPageLayout->setStretch(2, 0); // 歌词不拉伸
 
     // 主堆叠窗口
     mainStackedWidget = new QStackedWidget;
     mainStackedWidget->addWidget(resultList);
     mainStackedWidget->addWidget(playerPage);
     mainStackedWidget->setCurrentWidget(resultList); // 默认显示搜索页
+    // 设置大小策略为Expanding，确保两个页面占用相同的空间
+    mainStackedWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
     // --- 布局设置 ---
     topLayout = new QHBoxLayout;
     topLayout->addWidget(backButton);
+    topLayout->addWidget(searchSourceCombo); // 添加搜索源选择
     topLayout->addWidget(searchInput);
     topLayout->addWidget(searchButton);
 
@@ -148,7 +166,7 @@ Widget::Widget(QWidget *parent)
     setLayout(mainLayout);
     setWindowTitle("Melody");
     setWindowIcon(QIcon(":/logo.png"));
-    resize(400, 400);
+    resize(350, 450);
 
     // --- 样式表设置 ---
     setWidgetStyle(currentBackgroundColor);
@@ -167,11 +185,24 @@ Widget::Widget(QWidget *parent)
     connect(nextPageButton, &QPushButton::clicked, this, &Widget::onNextPageButtonClicked);
     connect(searchButton, &QPushButton::clicked, this, &Widget::onSearchButtonClicked);
     connect(searchInput, &QLineEdit::returnPressed, this, &Widget::onSearchButtonClicked);
+
+    // 搜索源切换
+    connect(searchSourceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &Widget::onSearchSourceChanged);
+
+    // 网易云音乐API信号
     connect(apiManager, &ApiManager::searchFinished, this, &Widget::onSearchFinished);
     connect(apiManager, &ApiManager::lyricFinished, this, &Widget::onLyricFinished);
     connect(apiManager, &ApiManager::songDetailFinished, this, &Widget::onSongDetailFinished);
     connect(apiManager, &ApiManager::imageDownloaded, this, &Widget::onImageDownloaded);
     connect(apiManager, &ApiManager::songUrlReady, this, &Widget::onSongUrlReady);
+
+    // Bilibili API信号
+    connect(apiManager, &ApiManager::bilibiliSearchFinished, this, &Widget::onBilibiliSearchFinished);
+    connect(apiManager, &ApiManager::bilibiliVideoInfoFinished, this, &Widget::onBilibiliVideoInfoFinished);
+    connect(apiManager, &ApiManager::bilibiliAudioUrlReady, this, &Widget::onBilibiliAudioUrlReady);
+    connect(apiManager, &ApiManager::bilibiliImageDownloaded, this, &Widget::onBilibiliImageDownloaded);
+
     connect(apiManager, &ApiManager::error, this, &Widget::onApiError);
     connect(resultList, &QListWidget::itemDoubleClicked, this, &Widget::onResultItemDoubleClicked);
     connect(playPauseButton, &QPushButton::clicked, this, &Widget::onPlayPauseButtonClicked);
@@ -223,8 +254,29 @@ void Widget::onSearchButtonClicked()
         mainStackedWidget->setCurrentWidget(resultList);
         searchButton->setEnabled(false);
         searchButton->setText("搜索中...");
-        // 调用带分页参数的搜索
-        apiManager->searchSongs(currentSearchKeywords, 15, (currentPage - 1) * 15);
+
+        // 根据搜索源调用不同的API
+        if (currentSearchSource == SearchSource::NetEase) {
+            apiManager->searchSongs(currentSearchKeywords, 15, (currentPage - 1) * 15);
+        } else {
+            apiManager->searchBilibiliVideos(currentSearchKeywords, currentPage);
+        }
+    }
+}
+
+void Widget::onSearchSourceChanged(int index)
+{
+    currentSearchSource = (index == 0) ? SearchSource::NetEase : SearchSource::Bilibili;
+    // 清空当前搜索结果
+    resultList->clear();
+    searchResultSongs.clear();
+    playlistManager->addSongs({}); // 清空播放列表
+
+    // 更新placeholder提示
+    if (currentSearchSource == SearchSource::NetEase) {
+        searchInput->setPlaceholderText("输入歌名或歌手...");
+    } else {
+        searchInput->setPlaceholderText("输入Bilibili视频关键词...");
     }
 }
 
@@ -262,7 +314,12 @@ void Widget::onSearchFinished(const QJsonDocument &json)
                 item->setData(Qt::UserRole, songId);
                 resultList->addItem(item);
 
-                searchResultSongs.append({songId, songName, artistName});
+                Song song;
+                song.id = songId;
+                song.name = songName;
+                song.artist = artistName;
+                song.source = SearchSource::NetEase;
+                searchResultSongs.append(song);
             }
             playlistManager->addSongs(searchResultSongs);
         }
@@ -270,6 +327,76 @@ void Widget::onSearchFinished(const QJsonDocument &json)
 
     // 更新分页控件状态
     int totalPages = (totalSongCount > 0) ? (totalSongCount + 14) / 15 : 0;
+    pageLabel->setText(QString("第 %1 / %2 页").arg(totalPages > 0 ? currentPage : 0).arg(totalPages));
+    prevPageButton->setEnabled(currentPage > 1);
+    nextPageButton->setEnabled(currentPage < totalPages);
+}
+
+void Widget::onBilibiliSearchFinished(const QJsonDocument &json)
+{
+    searchButton->setEnabled(true);
+    searchButton->setText("搜索");
+    resultList->clear();
+    searchResultSongs.clear();
+
+    QJsonObject rootObj = json.object();
+    int totalResults = 0;
+
+    qDebug() << "Bilibili search response code:" << rootObj.value("code").toInt();
+    qDebug() << "Bilibili search response message:" << rootObj.value("message").toString();
+
+    if (rootObj.value("code").toInt() != 0) {
+        QString message = rootObj.value("message").toString();
+        QMessageBox::warning(this, "搜索失败", message.isEmpty() ? "Bilibili搜索失败" : message);
+        return;
+    }
+
+    QJsonObject data = rootObj.value("data").toObject();
+    totalResults = data.value("numResults").toInt();
+    qDebug() << "Bilibili search total results:" << totalResults;
+
+    // Bilibili搜索API的响应结构: data.result.video 包含视频列表
+    QJsonObject resultObj = data.value("result").toObject();
+    QJsonArray videosArray = resultObj.value("video").toArray();
+    qDebug() << "Bilibili search videos count:" << videosArray.size();
+
+    if (videosArray.isEmpty() && currentPage == 1) {
+        QMessageBox::information(this, "无结果", "未找到相关视频。");
+    }
+
+    for (const QJsonValue &value : videosArray) {
+        QJsonObject videoObj = value.toObject();
+
+        QString bvid = videoObj["bvid"].toString();
+        QString title = videoObj["title"].toString();
+        // 去除HTML标签
+        title.remove(QRegularExpression("<[^>]*>"));
+        QString author = videoObj["author"].toString();
+        QString pic = videoObj["pic"].toString();
+        if (!pic.startsWith("http")) {
+            pic = "https:" + pic;
+        }
+        int duration = videoObj["duration"].toString().split(":").first().toInt() * 60 +
+                       videoObj["duration"].toString().split(":").last().toInt();
+
+        QListWidgetItem *item = new QListWidgetItem(QString("[B站] %1 - %2").arg(title, author));
+        item->setData(Qt::UserRole, bvid); // 使用bvid作为ID
+        resultList->addItem(item);
+
+        Song song;
+        song.bvid = bvid;
+        song.name = title;
+        song.artist = author;
+        song.picUrl = pic;
+        song.duration = duration;
+        song.source = SearchSource::Bilibili;
+        searchResultSongs.append(song);
+    }
+
+    playlistManager->addSongs(searchResultSongs);
+
+    // 更新分页控件状态 (Bilibili每页20个结果)
+    int totalPages = (totalResults > 0) ? (totalResults + 19) / 20 : 0;
     pageLabel->setText(QString("第 %1 / %2 页").arg(totalPages > 0 ? currentPage : 0).arg(totalPages));
     prevPageButton->setEnabled(currentPage > 1);
     nextPageButton->setEnabled(currentPage < totalPages);
@@ -330,6 +457,62 @@ void Widget::onSongUrlReady(const QUrl &url)
     mediaPlayer->play();
 }
 
+void Widget::onBilibiliVideoInfoFinished(const QJsonDocument &json)
+{
+    QJsonObject rootObj = json.object();
+    if (rootObj.value("code").toInt() != 0) {
+        qDebug() << "获取Bilibili视频信息失败:" << rootObj.value("message").toString();
+        return;
+    }
+
+    QJsonObject data = rootObj.value("data").toObject();
+    QString bvid = data.value("bvid").toString();
+    qint64 cid = data.value("cid").toVariant().toLongLong();
+    QString pic = data.value("pic").toString();
+
+    // 更新当前歌曲的cid
+    Song currentSong = playlistManager->getCurrentSong();
+    if (currentSong.bvid == bvid) {
+        // 找到并更新cid
+        for (int i = 0; i < searchResultSongs.size(); ++i) {
+            if (searchResultSongs[i].bvid == bvid) {
+                searchResultSongs[i].cid = cid;
+                break;
+            }
+        }
+
+        // 下载封面图
+        if (!pic.isEmpty()) {
+            if (!pic.startsWith("http")) {
+                pic = "https:" + pic;
+            }
+            apiManager->downloadBilibiliImage(QUrl(pic));
+        }
+
+        // 获取音频URL
+        apiManager->getBilibiliAudioUrl(bvid, cid);
+    }
+}
+
+void Widget::onBilibiliAudioUrlReady(const QUrl &url)
+{
+    mediaPlayer->setSource(url);
+    mediaPlayer->play();
+}
+
+void Widget::onBilibiliImageDownloaded(const QByteArray &data)
+{
+    QPixmap pixmap;
+    if (pixmap.loadFromData(data)) {
+        originalAlbumArt = pixmap;
+        int size = qMin(this->width(), this->height()) * 0.6;
+        albumArtLabel->setPixmap(originalAlbumArt.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+
+        QColor dominantColor = extractDominantColor(pixmap);
+        updateBackgroundColor(dominantColor);
+    }
+}
+
 void Widget::onApiError(const QString &errorString)
 {
     // 检查错误是否与获取歌曲URL有关
@@ -353,21 +536,25 @@ void Widget::onBackButtonClicked()
 
 void Widget::onResultItemDoubleClicked(QListWidgetItem *item)
 {
-    qint64 clickedSongId = item->data(Qt::UserRole).toLongLong();
     int index = resultList->row(item);
     Song clickedSong = searchResultSongs.at(index);
 
     // 检查点击的歌曲是否就是当前正在播放的歌曲
-    if (clickedSongId == currentPlayingSongId && mediaPlayer->playbackState() != QMediaPlayer::StoppedState) {
+    bool isSameSong = (clickedSong.source == SearchSource::NetEase && clickedSong.id == currentPlayingSongId) ||
+                      (clickedSong.source == SearchSource::Bilibili && clickedSong.bvid == currentBvid);
+
+    if (isSameSong && mediaPlayer->playbackState() != QMediaPlayer::StoppedState) {
         // 如果是，并且播放器不是停止状态，则只切换回播放界面
-        songNameLabel->setText(clickedSong.name); // 确保歌曲名称正确显示
+        songNameLabel->setText(clickedSong.name);
         mainStackedWidget->setCurrentWidget(playerPage);
     } else {
         // 否则，按正常流程播放新歌曲
         playlistManager->setCurrentIndex(index);
-        
+
         Song currentSong = playlistManager->getCurrentSong();
-        if (currentSong.id != -1) {
+        if (currentSong.source == SearchSource::Bilibili) {
+            playBilibiliVideo(currentSong.bvid);
+        } else if (currentSong.id != -1) {
             playSong(currentSong.id);
         }
     }
@@ -432,6 +619,7 @@ void Widget::playSong(qint64 id)
     if (id <= 0) return;
 
     currentPlayingSongId = id; // 更新当前播放的歌曲ID
+    currentBvid.clear(); // 清除Bilibili BV号
 
     // 从播放列表获取当前歌曲信息
     Song currentSong = playlistManager->getCurrentSong();
@@ -459,11 +647,40 @@ void Widget::playSong(qint64 id)
     mainStackedWidget->setCurrentWidget(playerPage);
 }
 
+void Widget::playBilibiliVideo(const QString &bvid)
+{
+    if (bvid.isEmpty()) return;
+
+    currentBvid = bvid; // 更新当前播放的BV号
+    currentPlayingSongId = -1; // 清除网易云音乐ID
+
+    // 从播放列表获取当前歌曲信息
+    Song currentSong = playlistManager->getCurrentSong();
+    if (currentSong.bvid == bvid) {
+        songNameLabel->setText(currentSong.name);
+    } else {
+        songNameLabel->setText("加载中...");
+    }
+
+    // 重置UI
+    originalAlbumArt = QPixmap();
+    albumArtLabel->setPixmap(QPixmap());
+    lyricLabel->setText("Bilibili视频 - 无歌词");
+    updateBackgroundColor(QColor(51, 51, 51));
+
+    // 获取视频信息（包含cid和封面）
+    apiManager->getBilibiliVideoInfo(bvid);
+
+    // 切换到播放详情页
+    mainStackedWidget->setCurrentWidget(playerPage);
+}
+
 void Widget::onMediaStatusChanged(QMediaPlayer::MediaStatus status)
 {
     // 当歌曲播放结束时，自动播放下一首
     if (status == QMediaPlayer::EndOfMedia) {
         currentPlayingSongId = -1; // 播放结束，重置ID
+        currentBvid.clear(); // 清除BV号
         playNextSong();
     }
 }
@@ -473,7 +690,9 @@ void Widget::playNextSong()
     if (playlistManager->isEmpty()) return;
 
     Song nextSong = playlistManager->getNextSong();
-    if (nextSong.id != -1) {
+    if (nextSong.source == SearchSource::Bilibili && !nextSong.bvid.isEmpty()) {
+        playBilibiliVideo(nextSong.bvid);
+    } else if (nextSong.id != -1) {
         playSong(nextSong.id);
     }
 }
@@ -483,7 +702,9 @@ void Widget::playPreviousSong()
     if (playlistManager->isEmpty()) return;
 
     Song prevSong = playlistManager->getPreviousSong();
-    if (prevSong.id != -1) {
+    if (prevSong.source == SearchSource::Bilibili && !prevSong.bvid.isEmpty()) {
+        playBilibiliVideo(prevSong.bvid);
+    } else if (prevSong.id != -1) {
         playSong(prevSong.id);
     }
 }
@@ -516,7 +737,11 @@ void Widget::onPrevPageButtonClicked()
         currentPage--;
         searchButton->setEnabled(false);
         searchButton->setText("加载中...");
-        apiManager->searchSongs(currentSearchKeywords, 15, (currentPage - 1) * 15);
+        if (currentSearchSource == SearchSource::NetEase) {
+            apiManager->searchSongs(currentSearchKeywords, 15, (currentPage - 1) * 15);
+        } else {
+            apiManager->searchBilibiliVideos(currentSearchKeywords, currentPage);
+        }
     }
 }
 
@@ -526,7 +751,11 @@ void Widget::onNextPageButtonClicked()
     currentPage++;
     searchButton->setEnabled(false);
     searchButton->setText("加载中...");
-    apiManager->searchSongs(currentSearchKeywords, 15, (currentPage - 1) * 15);
+    if (currentSearchSource == SearchSource::NetEase) {
+        apiManager->searchSongs(currentSearchKeywords, 15, (currentPage - 1) * 15);
+    } else {
+        apiManager->searchBilibiliVideos(currentSearchKeywords, currentPage);
+    }
 }
 
 void Widget::onMainStackCurrentChanged(int index)
@@ -598,6 +827,23 @@ void Widget::setWidgetStyle(const QColor &color)
             border-radius: 5px;
             padding: 5px;
             color: %1;
+        }
+        QComboBox {
+            background-color: rgba(0, 0, 0, 0.2);
+            border: none;
+            border-radius: 5px;
+            padding: 5px;
+            color: %1;
+        }
+        QComboBox::drop-down {
+            border: none;
+        }
+        QComboBox QAbstractItemView {
+            background-color: %3;
+            color: %1;
+            selection-background-color: %1;
+            selection-color: %2;
+            border: none;
         }
         QPushButton {
             background-color: rgba(0, 0, 0, 0.2);

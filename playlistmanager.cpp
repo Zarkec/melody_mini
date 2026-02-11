@@ -25,7 +25,9 @@ void PlaylistManager::setCurrentIndex(int index)
 Song PlaylistManager::getNextSong(bool isAutoTriggered)
 {
     if (playlist.isEmpty()) {
-        return {-1, "", ""}; // 返回无效歌曲
+        Song invalidSong;
+        invalidSong.id = -1;
+        return invalidSong; // 返回无效歌曲
     }
 
     if (currentMode == LoopOne && isAutoTriggered) {
@@ -53,7 +55,9 @@ Song PlaylistManager::getNextSong(bool isAutoTriggered)
 Song PlaylistManager::getPreviousSong()
 {
     if (playlist.isEmpty()) {
-        return {-1, "", ""}; // 返回无效歌曲
+        Song invalidSong;
+        invalidSong.id = -1;
+        return invalidSong; // 返回无效歌曲
     }
 
     // 随机模式下，上一曲通常表现为顺序播放的上一曲
@@ -72,7 +76,9 @@ Song PlaylistManager::getCurrentSong() const
     if (currentIndex >= 0 && currentIndex < playlist.size()) {
         return playlist[currentIndex];
     }
-    return {-1, "", ""}; // 返回无效歌曲
+    Song invalidSong;
+    invalidSong.id = -1;
+    return invalidSong; // 返回无效歌曲
 }
 
 // 设置播放模式
