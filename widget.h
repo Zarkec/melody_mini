@@ -54,9 +54,12 @@ private slots:
     void onBilibiliSearchFinished(const QJsonDocument &json);
     void onBilibiliVideoInfoFinished(const QJsonDocument &json);
     void onBilibiliAudioUrlReady(const QUrl &url);
+    void onBilibiliAudioDataReady(const QByteArray &data);
+    void onBilibiliAudioFileReady(const QString &filePath);
     void onBilibiliImageDownloaded(const QByteArray &data);
 
     void onApiError(const QString &errorString);
+    void onMediaPlayerError(QMediaPlayer::Error error, const QString &errorString);
 
     // 播放器相关
     void onResultItemDoubleClicked(QListWidgetItem *item);
@@ -161,6 +164,7 @@ private:
     int currentPage;
     qint64 currentPlayingSongId;
     QString currentBvid; // 当前播放的Bilibili视频BV号
+    QUrl currentBilibiliAudioUrl; // 当前Bilibili音频URL
     SearchSource currentSearchSource; // 当前搜索源
 
     // 动态背景

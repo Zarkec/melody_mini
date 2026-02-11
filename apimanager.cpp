@@ -6,6 +6,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QDebug>
+#include <QTemporaryFile>
 
 ApiManager::ApiManager(QObject *parent)
     : QObject{parent}
@@ -191,6 +192,12 @@ void ApiManager::downloadBilibiliImage(const QUrl &url)
     connect(reply, &QNetworkReply::finished, this, [this, reply](){ onBilibiliImageReplyFinished(reply); });
 }
 
+void ApiManager::downloadBilibiliAudio(const QUrl &url)
+{
+    // 使用流式下载到临时文件，实现边下边播
+    streamBilibiliAudio(url);
+}
+
 void ApiManager::onBilibiliSearchReplyFinished(QNetworkReply *reply)
 {
     if (reply->error() != QNetworkReply::NoError) {
@@ -296,4 +303,62 @@ void ApiManager::onBilibiliImageReplyFinished(QNetworkReply *reply)
         emit bilibiliImageDownloaded(reply->readAll());
     }
     reply->deleteLater();
+}
+
+void ApiManager::onBilibiliAudioDownloadFinished(QNetworkReply *reply)
+{
+    if (reply->error() != QNetworkReply::NoError) {
+        emit error("下载Bilibili音频失败: " + reply->errorString());
+    } else {
+        QByteArray audioData = reply->readAll();
+        if (!audioData.isEmpty()) {
+            emit bilibiliAudioDataReady(audioData);
+        } else {
+            emit error("Bilibili音频数据为空");
+        }
+    }
+    reply->deleteLater();
+}
+
+void ApiManager::streamBilibiliAudio(const QUrl &url)
+{
+    QNetworkRequest request(url);
+    setBilibiliHeaders(request);
+
+    QNetworkReply *reply = manager->get(request);
+
+    // 创建临时文件
+    QTemporaryFile *tempFile = new QTemporaryFile();
+    if (!tempFile->open()) {
+        emit error("无法创建临时文件用于音频下载");
+        tempFile->deleteLater();
+        reply->deleteLater();
+        return;
+    }
+
+    // 连接下载进度信号
+    connect(reply, &QNetworkReply::downloadProgress, this, [reply, tempFile](qint64 bytesReceived, qint64 bytesTotal) {
+        Q_UNUSED(bytesTotal)
+        // 将接收到的数据写入临时文件
+        tempFile->write(reply->readAll());
+    });
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply, tempFile]() {
+        if (reply->error() != QNetworkReply::NoError) {
+            emit error("流式下载Bilibili音频失败: " + reply->errorString());
+            tempFile->deleteLater();
+        } else {
+            // 写入剩余数据
+            tempFile->write(reply->readAll());
+            tempFile->flush();
+
+            // 发送临时文件路径
+            emit bilibiliAudioFileReady(tempFile->fileName());
+
+            // 文件将由接收方管理，不要立即删除
+            tempFile->setAutoRemove(false);
+            tempFile->deleteLater();
+        }
+        reply->deleteLater();
+    });
 }

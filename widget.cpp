@@ -8,6 +8,7 @@
 #include <QSlider>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
+#include <QBuffer>
 #include <QStackedWidget>
 #include <QAudioOutput>
 #include <QMessageBox>
@@ -17,6 +18,7 @@
 #include <QUrl>
 #include <QRegularExpression>
 #include <QPixmap>
+#include <QFile>
 #include <QFont>
 #include <QMenu>
 #include <QWidgetAction>
@@ -201,6 +203,8 @@ Widget::Widget(QWidget *parent)
     connect(apiManager, &ApiManager::bilibiliSearchFinished, this, &Widget::onBilibiliSearchFinished);
     connect(apiManager, &ApiManager::bilibiliVideoInfoFinished, this, &Widget::onBilibiliVideoInfoFinished);
     connect(apiManager, &ApiManager::bilibiliAudioUrlReady, this, &Widget::onBilibiliAudioUrlReady);
+    connect(apiManager, &ApiManager::bilibiliAudioDataReady, this, &Widget::onBilibiliAudioDataReady);
+    connect(apiManager, &ApiManager::bilibiliAudioFileReady, this, &Widget::onBilibiliAudioFileReady);
     connect(apiManager, &ApiManager::bilibiliImageDownloaded, this, &Widget::onBilibiliImageDownloaded);
 
     connect(apiManager, &ApiManager::error, this, &Widget::onApiError);
@@ -214,6 +218,7 @@ Widget::Widget(QWidget *parent)
     connect(mediaPlayer, &QMediaPlayer::durationChanged, this, &Widget::updateDuration);
     connect(mediaPlayer, &QMediaPlayer::playbackStateChanged, this, &Widget::updateState);
     connect(mediaPlayer, &QMediaPlayer::mediaStatusChanged, this, &Widget::onMediaStatusChanged); // 监听播放结束
+    connect(mediaPlayer, &QMediaPlayer::errorOccurred, this, &Widget::onMediaPlayerError); // 监听播放错误
     connect(progressSlider, &QSlider::sliderMoved, this, &Widget::setPosition);
 
     // 新增：连接上一曲/下一曲/播放模式按钮
@@ -496,8 +501,46 @@ void Widget::onBilibiliVideoInfoFinished(const QJsonDocument &json)
 
 void Widget::onBilibiliAudioUrlReady(const QUrl &url)
 {
+    // 方案1：先尝试直接播放
     mediaPlayer->setSource(url);
     mediaPlayer->play();
+
+    // 保存URL，如果播放失败会用到
+    currentBilibiliAudioUrl = url;
+}
+
+void Widget::onBilibiliAudioDataReady(const QByteArray &data)
+{
+    // 使用 QBuffer 播放下载的音频数据
+    QBuffer *audioBuffer = new QBuffer();
+    audioBuffer->setData(data);
+    audioBuffer->open(QIODevice::ReadOnly);
+
+    // 设置媒体源为缓冲区
+    mediaPlayer->setSourceDevice(audioBuffer);
+    mediaPlayer->play();
+
+    // 清理：当播放完成后删除缓冲区
+    connect(mediaPlayer, &QMediaPlayer::playbackStateChanged, this, [this, audioBuffer](QMediaPlayer::PlaybackState state) {
+        if (state == QMediaPlayer::StoppedState) {
+            audioBuffer->deleteLater();
+        }
+    });
+}
+
+void Widget::onBilibiliAudioFileReady(const QString &filePath)
+{
+    // 使用临时文件播放
+    mediaPlayer->setSource(QUrl::fromLocalFile(filePath));
+    mediaPlayer->play();
+
+    // 清理：播放完成后删除临时文件
+    connect(mediaPlayer, &QMediaPlayer::playbackStateChanged, this, [filePath](QMediaPlayer::PlaybackState state) {
+        if (state == QMediaPlayer::StoppedState) {
+            QFile::remove(filePath);
+            qDebug() << "Removed temporary audio file:" << filePath;
+        }
+    });
 }
 
 void Widget::onBilibiliImageDownloaded(const QByteArray &data)
@@ -527,6 +570,26 @@ void Widget::onApiError(const QString &errorString)
     searchButton->setEnabled(true);
     searchButton->setText("搜索");
     QMessageBox::critical(this, "网络错误", errorString);
+}
+
+void Widget::onMediaPlayerError(QMediaPlayer::Error error, const QString &errorString)
+{
+    // 检查是否是访问被拒绝错误（403）
+    if (error == QMediaPlayer::ResourceError && !currentBilibiliAudioUrl.isEmpty()) {
+        qDebug() << "Direct playback failed (likely 403), switching to download mode for:" << currentBilibiliAudioUrl.toString();
+
+        // 停止当前播放
+        mediaPlayer->stop();
+
+        // 使用备用方案：下载音频文件
+        apiManager->downloadBilibiliAudio(currentBilibiliAudioUrl);
+
+        // 清空当前URL，避免重复尝试
+        currentBilibiliAudioUrl.clear();
+    } else {
+        // 其他错误，显示错误信息
+        qDebug() << "Media player error:" << error << errorString;
+    }
 }
 
 void Widget::onBackButtonClicked()
