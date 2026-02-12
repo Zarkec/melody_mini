@@ -9,10 +9,34 @@
 #include <QResizeEvent>
 #include <QCloseEvent>
 #include <QSystemTrayIcon>
+#include <QTimer>
 #include "playlistmanager.h" // 引入播放列表管理器
 
 // 搜索源枚举声明
 enum class SearchSource;
+
+// 自定义加载动画控件
+class LoadingSpinner : public QWidget
+{
+    Q_OBJECT
+    Q_PROPERTY(int angle READ angle WRITE setAngle)
+
+public:
+    explicit LoadingSpinner(QWidget *parent = nullptr);
+    QSize sizeHint() const override;
+    int angle() const { return m_angle; }
+    void setAngle(int angle);
+    void start() { m_timer->start(30); show(); }
+    void stop() { m_timer->stop(); hide(); }
+
+protected:
+    void paintEvent(QPaintEvent *event) override;
+
+private:
+    int m_angle = 0;
+    QTimer *m_timer;
+    QColor m_color;
+};
 
 // 前置声明
 class QLineEdit;
@@ -143,6 +167,9 @@ private:
     QVBoxLayout *mainLayout;
     QHBoxLayout *topLayout;
     QHBoxLayout *paginationLayout;
+
+    // 加载动画
+    LoadingSpinner *loadingSpinner;
 
     // 媒体播放器
     QMediaPlayer *mediaPlayer;

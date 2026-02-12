@@ -24,6 +24,80 @@
 #include <QWidgetAction>
 #include <QDebug>
 #include <QComboBox>
+#include <QTimer>
+#include <QPainter>
+#include <QEasingCurve>
+
+// --- LoadingSpinner 实现 ---
+LoadingSpinner::LoadingSpinner(QWidget *parent)
+    : QWidget(parent), m_color(100, 180, 255)
+{
+    setFixedSize(32, 32);
+    m_timer = new QTimer(this);
+    connect(m_timer, &QTimer::timeout, this, [this]() {
+        m_angle = (m_angle + 15) % 360;
+        update();
+    });
+}
+
+QSize LoadingSpinner::sizeHint() const
+{
+    return QSize(32, 32);
+}
+
+void LoadingSpinner::setAngle(int angle)
+{
+    if (m_angle != angle) {
+        m_angle = angle;
+        update();
+    }
+}
+
+void LoadingSpinner::paintEvent(QPaintEvent *event)
+{
+    Q_UNUSED(event);
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+
+    int side = qMin(width(), height());
+    painter.translate(width() / 2.0, height() / 2.0);
+    painter.scale(side / 32.0, side / 32.0);
+
+    // 绘制底层淡色圆环
+    painter.setPen(QPen(QColor(100, 180, 255, 50), 3));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawEllipse(QPointF(0, 0), 11, 11);
+
+    // 绘制旋转的渐变圆弧（接近完整的圆环）
+    QConicalGradient gradient(0, 0, m_angle);
+    gradient.setColorAt(0, m_color);
+    gradient.setColorAt(0.5, m_color.lighter(140));
+    gradient.setColorAt(0.8, QColor(100, 180, 255, 100));
+    gradient.setColorAt(1, QColor(100, 180, 255, 30));
+
+    QPen pen(QBrush(gradient), 3);
+    pen.setCapStyle(Qt::RoundCap);
+    painter.setPen(pen);
+
+    QRectF rect(-11, -11, 22, 22);
+    // 绘制接近完整的圆环（330度），留一个小缺口产生旋转效果
+    painter.drawArc(rect, m_angle * 16, -330 * 16);
+
+    // 绘制头部发光圆点
+    qreal rad = qDegreesToRadians(static_cast<qreal>(m_angle));
+    qreal dotX = 11 * qCos(rad);
+    qreal dotY = -11 * qSin(rad);
+
+    QRadialGradient dotGradient(dotX, dotY, 5);
+    dotGradient.setColorAt(0, QColor(255, 255, 255, 200));
+    dotGradient.setColorAt(0.5, m_color.lighter(130));
+    dotGradient.setColorAt(1, QColor(100, 180, 255, 0));
+    painter.setBrush(dotGradient);
+    painter.setPen(Qt::NoPen);
+    painter.drawEllipse(QPointF(dotX, dotY), 4, 4);
+}
+
+// --- Widget 实现 ---
 
 Widget::Widget(QWidget *parent)
     : QWidget(parent), currentDuration(0)
@@ -42,6 +116,10 @@ Widget::Widget(QWidget *parent)
     backgroundAnimation = new QPropertyAnimation(this, "widgetBackgroundColor", this);
     backgroundAnimation->setDuration(800);
     backgroundAnimation->setEasingCurve(QEasingCurve::InOutQuad);
+
+    // --- 加载动画初始化 ---
+    loadingSpinner = new LoadingSpinner(this);
+    loadingSpinner->hide(); // 默认隐藏
 
     // --- UI 控件初始化 ---
     searchInput = new QLineEdit;
@@ -100,6 +178,7 @@ Widget::Widget(QWidget *parent)
     albumArtLabel->setScaledContents(true);
     albumArtLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     albumArtLabel->setAlignment(Qt::AlignCenter);
+
     lyricLabel = new QLabel("欢迎使用 Melody");
     lyricLabel->setAlignment(Qt::AlignCenter);
     lyricLabel->setWordWrap(true);
@@ -150,6 +229,7 @@ Widget::Widget(QWidget *parent)
     controlsLayout->addStretch();
     controlsLayout->addWidget(prevButton);
     controlsLayout->addWidget(playPauseButton);
+    controlsLayout->addWidget(loadingSpinner);  // 加载动画控件
     controlsLayout->addWidget(nextButton);
     controlsLayout->addStretch();
     controlsLayout->addWidget(volumeButton);
@@ -507,6 +587,9 @@ void Widget::onBilibiliAudioUrlReady(const QUrl &url)
 
     // 保存URL，如果播放失败会用到
     currentBilibiliAudioUrl = url;
+
+    // 注意：加载动画在onMediaPlayerError或onBilibiliAudioFileReady中隐藏
+    // 因为直接播放可能失败（403错误）
 }
 
 void Widget::onBilibiliAudioDataReady(const QByteArray &data)
@@ -530,6 +613,10 @@ void Widget::onBilibiliAudioDataReady(const QByteArray &data)
 
 void Widget::onBilibiliAudioFileReady(const QString &filePath)
 {
+    // 隐藏加载动画，显示播放按钮
+    loadingSpinner->stop();
+    playPauseButton->show();
+
     // 使用临时文件播放
     mediaPlayer->setSource(QUrl::fromLocalFile(filePath));
     mediaPlayer->play();
@@ -587,7 +674,9 @@ void Widget::onMediaPlayerError(QMediaPlayer::Error error, const QString &errorS
         // 清空当前URL，避免重复尝试
         currentBilibiliAudioUrl.clear();
     } else {
-        // 其他错误，显示错误信息
+        // 其他错误，显示错误信息并隐藏加载动画
+        loadingSpinner->stop();
+        playPauseButton->show();
         qDebug() << "Media player error:" << error << errorString;
     }
 }
@@ -665,6 +754,12 @@ void Widget::updateState(QMediaPlayer::PlaybackState state)
 {
     if (state == QMediaPlayer::PlayingState) {
         playPauseButton->setText("⏸");
+
+        // 隐藏Bilibili加载动画（如果正在显示），显示播放按钮
+        if (loadingSpinner->isVisible()) {
+            loadingSpinner->stop();
+            playPauseButton->show();
+        }
     } else {
         playPauseButton->setText("▶");
     }
@@ -730,6 +825,11 @@ void Widget::playBilibiliVideo(const QString &bvid)
     albumArtLabel->setPixmap(QPixmap());
     lyricLabel->setText("Bilibili视频 - 无歌词");
     updateBackgroundColor(QColor(51, 51, 51));
+
+    // 显示加载动画（隐藏播放按钮，显示加载标签）
+    playPauseButton->hide();
+    loadingSpinner->start(); // 启动加载动画
+    loadingSpinner->show();
 
     // 获取视频信息（包含cid和封面）
     apiManager->getBilibiliVideoInfo(bvid);
