@@ -11,6 +11,8 @@
 #include <QBuffer>
 #include <QStackedWidget>
 #include <QAudioOutput>
+#include <QAudioDevice>
+#include <QMediaDevices>
 #include <QMessageBox>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -358,8 +360,16 @@ Widget::Widget(QWidget *parent)
     // --- 后端对象初始化 ---
     mediaPlayer = new QMediaPlayer(this);
     audioOutput = new QAudioOutput(this);
+    mediaDevices = new QMediaDevices(this);
     mediaPlayer->setAudioOutput(audioOutput);
     audioOutput->setVolume(0.5);
+    
+    // 设置默认音频输出设备
+    QAudioDevice defaultDevice = QMediaDevices::defaultAudioOutput();
+    if (!defaultDevice.isNull()) {
+        audioOutput->setDevice(defaultDevice);
+    }
+    
     apiManager = new ApiManager(this);
 
     // --- 信号与槽连接 ---
@@ -402,6 +412,15 @@ Widget::Widget(QWidget *parent)
     connect(mediaPlayer, &QMediaPlayer::mediaStatusChanged, this, &Widget::onMediaStatusChanged); // 监听播放结束
     connect(mediaPlayer, &QMediaPlayer::errorOccurred, this, &Widget::onMediaPlayerError); // 监听播放错误
     connect(progressSlider, &QSlider::sliderMoved, this, &Widget::setPosition);
+
+    // 监听音频输出设备变化
+    connect(mediaDevices, &QMediaDevices::audioOutputsChanged, this, [this]() {
+        QAudioDevice newDefault = QMediaDevices::defaultAudioOutput();
+        if (!newDefault.isNull() && audioOutput->device() != newDefault) {
+            audioOutput->setDevice(newDefault);
+            qDebug() << "音频设备已切换到:" << newDefault.description();
+        }
+    });
 
     // 新增：连接上一曲/下一曲/播放模式按钮
     connect(prevButton, &QPushButton::clicked, this, &Widget::playPreviousSong);

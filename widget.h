@@ -79,6 +79,7 @@ class QHBoxLayout;
 class QVBoxLayout;
 class QStackedWidget;
 class QAudioOutput;
+class QMediaDevices;
 class ApiManager;
 class PlaylistManager;
 class QMenu;
@@ -207,6 +208,7 @@ private:
     // 媒体播放器
     QMediaPlayer *mediaPlayer;
     QAudioOutput *audioOutput;
+    QMediaDevices *mediaDevices;
     qint64 currentDuration;
 
     // API管理器
