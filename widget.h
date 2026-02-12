@@ -38,6 +38,36 @@ private:
     QColor m_color;
 };
 
+// 动态流动背景控件（苹果音乐风格）
+class FlowingBackground : public QWidget
+{
+    Q_OBJECT
+    Q_PROPERTY(qreal timeOffset READ timeOffset WRITE setTimeOffset)
+
+public:
+    explicit FlowingBackground(QWidget *parent = nullptr);
+    void setColors(const QVector<QColor> &colors);
+    qreal timeOffset() const { return m_timeOffset; }
+    void setTimeOffset(qreal offset);
+
+protected:
+    void paintEvent(QPaintEvent *event) override;
+
+private:
+    QVector<QColor> m_colors;
+    qreal m_timeOffset = 0;
+    
+    struct Blob {
+        QColor color;
+        qreal x, y;        // 中心位置 (0-1)
+        qreal radius;      // 半径
+        qreal speedX;      // 移动速度
+        qreal speedY;
+        qreal phase;       // 相位偏移
+    };
+    QVector<Blob> m_blobs;
+};
+
 // 前置声明
 class QLineEdit;
 class QPushButton;
@@ -131,9 +161,12 @@ private:
 
     // 动态背景
     QColor extractDominantColor(const QPixmap &pixmap);
+    QVector<QColor> extractPaletteColors(const QPixmap &pixmap, int colorCount = 3);
     void updateBackgroundColor(const QColor &color);
+    void updateBackgroundWithPalette(const QVector<QColor> &colors);
     bool isColorDark(const QColor &color) const;
     void setWidgetStyle(const QColor &color);
+    void setWidgetStyleWithPalette(const QVector<QColor> &colors);
 
     // UI 元素
     QLineEdit *searchInput;
@@ -198,6 +231,9 @@ private:
     QPropertyAnimation *backgroundAnimation;
     QColor currentBackgroundColor;
     QPixmap originalAlbumArt;
+    FlowingBackground *flowingBackground; // 流动背景控件
+    QPropertyAnimation *flowAnimation; // 流动动画
+    QVector<QColor> currentPalette; // 当前调色板
 
     // 系统托盘
     QSystemTrayIcon *trayIcon;

@@ -26,7 +26,9 @@
 #include <QComboBox>
 #include <QTimer>
 #include <QPainter>
+#include <QPainterPath>
 #include <QEasingCurve>
+#include <QtMath>
 
 // --- LoadingSpinner 实现 ---
 LoadingSpinner::LoadingSpinner(QWidget *parent)
@@ -97,6 +99,93 @@ void LoadingSpinner::paintEvent(QPaintEvent *event)
     painter.drawEllipse(QPointF(dotX, dotY), 4, 4);
 }
 
+// --- FlowingBackground 实现 ---
+
+FlowingBackground::FlowingBackground(QWidget *parent)
+    : QWidget(parent)
+{
+    // 初始化默认颜色
+    m_colors = { QColor(80, 60, 140), QColor(60, 80, 120), QColor(40, 60, 100) };
+}
+
+void FlowingBackground::setColors(const QVector<QColor> &colors)
+{
+    m_colors = colors;
+    m_blobs.clear();
+    
+    if (colors.isEmpty()) return;
+    
+    // 为每种颜色创建一个"blob"
+    for (int i = 0; i < colors.size(); ++i) {
+        Blob blob;
+        blob.color = colors[i];
+        blob.x = 0.2 + (i % 3) * 0.3;  // 分散初始位置
+        blob.y = 0.2 + (i / 3) * 0.3;
+        blob.radius = 0.4 + (i % 2) * 0.2;  // 不同大小
+        blob.speedX = 0.0003 + i * 0.0001;  // 不同速度
+        blob.speedY = 0.0002 + i * 0.00015;
+        blob.phase = i * 1.5;  // 相位偏移
+        m_blobs.append(blob);
+    }
+    
+    update();
+}
+
+void FlowingBackground::setTimeOffset(qreal offset)
+{
+    m_timeOffset = offset;
+    update();
+}
+
+void FlowingBackground::paintEvent(QPaintEvent *event)
+{
+    Q_UNUSED(event);
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+    
+    QRectF rect = this->rect();
+    qreal w = rect.width();
+    qreal h = rect.height();
+    
+    // 深色底色
+    painter.fillRect(rect, QColor(20, 20, 25));
+    
+    // 绘制流动的颜色块
+    for (const Blob &blob : m_blobs) {
+        // 使用正弦函数创建平滑的移动轨迹
+        qreal t = m_timeOffset + blob.phase;
+        qreal x = blob.x + qSin(t * blob.speedX * 1000) * 0.3;
+        qreal y = blob.y + qCos(t * blob.speedY * 1000) * 0.3;
+        
+        // 确保在边界内
+        x = qBound(0.1, x, 0.9);
+        y = qBound(0.1, y, 0.9);
+        
+        // 转换为像素坐标
+        qreal cx = x * w;
+        qreal cy = y * h;
+        qreal radius = blob.radius * qMax(w, h);
+        
+        // 创建径向渐变
+        QRadialGradient gradient(cx, cy, radius);
+        QColor color = blob.color;
+        gradient.setColorAt(0, QColor(color.red(), color.green(), color.blue(), 180));
+        gradient.setColorAt(0.5, QColor(color.red(), color.green(), color.blue(), 80));
+        gradient.setColorAt(1, QColor(color.red(), color.green(), color.blue(), 0));
+        
+        painter.setBrush(gradient);
+        painter.setPen(Qt::NoPen);
+        painter.drawEllipse(QPointF(cx, cy), radius, radius);
+    }
+    
+    // 添加暗色遮罩提升文字可读性
+    QLinearGradient overlay(0, 0, 0, h);
+    overlay.setColorAt(0, QColor(0, 0, 0, 80));
+    overlay.setColorAt(0.5, QColor(0, 0, 0, 40));
+    overlay.setColorAt(1, QColor(0, 0, 0, 100));
+    painter.fillRect(rect, overlay);
+}
+
 // --- Widget 实现 ---
 
 Widget::Widget(QWidget *parent)
@@ -116,6 +205,18 @@ Widget::Widget(QWidget *parent)
     backgroundAnimation = new QPropertyAnimation(this, "widgetBackgroundColor", this);
     backgroundAnimation->setDuration(800);
     backgroundAnimation->setEasingCurve(QEasingCurve::InOutQuad);
+
+    // 流动背景控件
+    flowingBackground = new FlowingBackground(this);
+    flowingBackground->lower(); // 放到最底层
+    
+    // 流动动画
+    flowAnimation = new QPropertyAnimation(flowingBackground, "timeOffset", this);
+    flowAnimation->setDuration(20000); // 20秒一个周期
+    flowAnimation->setStartValue(0.0);
+    flowAnimation->setEndValue(100.0);
+    flowAnimation->setLoopCount(-1); // 无限循环
+    flowAnimation->setEasingCurve(QEasingCurve::Linear);
 
     // --- 加载动画初始化 ---
     loadingSpinner = new LoadingSpinner(this);
@@ -180,6 +281,7 @@ Widget::Widget(QWidget *parent)
     albumArtLabel->setAlignment(Qt::AlignCenter);
 
     lyricLabel = new QLabel("欢迎使用 Melody");
+    lyricLabel->setObjectName("lyricLabel");
     lyricLabel->setAlignment(Qt::AlignCenter);
     lyricLabel->setWordWrap(true);
     QFont lyricFont = lyricLabel->font();
@@ -531,8 +633,9 @@ void Widget::onImageDownloaded(const QByteArray &data)
         int size = qMin(this->width(), this->height()) * 0.6;
         albumArtLabel->setPixmap(originalAlbumArt.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation));
         
-        QColor dominantColor = extractDominantColor(pixmap);
-        updateBackgroundColor(dominantColor);
+        // 使用调色板提取和模糊背景（苹果音乐风格）
+        QVector<QColor> palette = extractPaletteColors(pixmap, 3);
+        updateBackgroundWithPalette(palette);
     }
 }
 
@@ -638,8 +741,9 @@ void Widget::onBilibiliImageDownloaded(const QByteArray &data)
         int size = qMin(this->width(), this->height()) * 0.6;
         albumArtLabel->setPixmap(originalAlbumArt.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation));
 
-        QColor dominantColor = extractDominantColor(pixmap);
-        updateBackgroundColor(dominantColor);
+        // 使用调色板提取和模糊背景（苹果音乐风格）
+        QVector<QColor> palette = extractPaletteColors(pixmap, 3);
+        updateBackgroundWithPalette(palette);
     }
 }
 
@@ -791,8 +895,10 @@ void Widget::playSong(qint64 id)
     // 重置UI
     originalAlbumArt = QPixmap();
     albumArtLabel->setPixmap(QPixmap());
+    flowAnimation->stop(); // 停止流动动画
+    currentPalette.clear();
     lyricLabel->setText("歌词加载中...");
-    updateBackgroundColor(QColor(51, 51, 51));
+    setWidgetStyle(QColor(51, 51, 51));
 
     // 请求播放链接
     apiManager->getSongUrl(id);
@@ -823,8 +929,10 @@ void Widget::playBilibiliVideo(const QString &bvid)
     // 重置UI
     originalAlbumArt = QPixmap();
     albumArtLabel->setPixmap(QPixmap());
+    flowAnimation->stop(); // 停止流动动画
+    currentPalette.clear();
     lyricLabel->setText("Bilibili视频 - 无歌词");
-    updateBackgroundColor(QColor(51, 51, 51));
+    setWidgetStyle(QColor(51, 51, 51));
 
     // 显示加载动画（隐藏播放按钮，显示加载标签）
     playPauseButton->hide();
@@ -964,6 +1072,117 @@ QColor Widget::extractDominantColor(const QPixmap &pixmap)
     return image.pixelColor(0, 0);
 }
 
+// 提取多个主色调（苹果音乐风格）
+QVector<QColor> Widget::extractPaletteColors(const QPixmap &pixmap, int colorCount)
+{
+    QVector<QColor> colors;
+    if (pixmap.isNull()) {
+        colors.append(QColor(51, 51, 51));
+        return colors;
+    }
+    
+    // 缩小图片以加快处理速度
+    QImage image = pixmap.toImage().scaled(100, 100, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    
+    // 使用区域采样法提取不同区域的主色
+    int w = image.width();
+    int h = image.height();
+    
+    // 定义采样区域（左上、右上、中心、左下、右下）
+    struct Region { int x1, y1, x2, y2; };
+    QVector<Region> regions = {
+        {0, 0, w/2, h/2},           // 左上
+        {w/2, 0, w, h/2},           // 右上
+        {w/4, h/4, w*3/4, h*3/4},   // 中心
+        {0, h/2, w/2, h},           // 左下
+        {w/2, h/2, w, h}            // 右下
+    };
+    
+    // 计算每个区域的平均颜色
+    QVector<QColor> regionColors;
+    for (const auto &region : regions) {
+        long r = 0, g = 0, b = 0;
+        int count = 0;
+        
+        for (int y = region.y1; y < region.y2 && y < h; ++y) {
+            for (int x = region.x1; x < region.x2 && x < w; ++x) {
+                QColor c = image.pixelColor(x, y);
+                r += c.red();
+                g += c.green();
+                b += c.blue();
+                count++;
+            }
+        }
+        
+        if (count > 0) {
+            regionColors.append(QColor(r/count, g/count, b/count));
+        }
+    }
+    
+    // 选择最亮的颜色作为主色（用于文字等）
+    std::sort(regionColors.begin(), regionColors.end(), [](const QColor &a, const QColor &b) {
+        return (a.red()*0.299 + a.green()*0.587 + a.blue()*0.114) > 
+               (b.red()*0.299 + b.green()*0.587 + b.blue()*0.114);
+    });
+    
+    // 选择最有代表性的颜色（避免太相似的颜色）
+    for (const QColor &c : regionColors) {
+        bool tooSimilar = false;
+        for (const QColor &existing : colors) {
+            int dr = qAbs(c.red() - existing.red());
+            int dg = qAbs(c.green() - existing.green());
+            int db = qAbs(c.blue() - existing.blue());
+            if (dr + dg + db < 80) { // 颜色差异阈值
+                tooSimilar = true;
+                break;
+            }
+        }
+        if (!tooSimilar) {
+            colors.append(c);
+            if (colors.size() >= colorCount) break;
+        }
+    }
+    
+    // 如果颜色不够，用主色生成变体
+    if (colors.size() < colorCount && !colors.isEmpty()) {
+        QColor base = colors.first();
+        while (colors.size() < colorCount) {
+            QColor variant = base.darker(120 + colors.size() * 30);
+            colors.append(variant);
+        }
+    }
+    
+    // 确保至少返回一个颜色
+    if (colors.isEmpty()) {
+        colors.append(QColor(51, 51, 51));
+    }
+    
+    return colors;
+}
+
+// 使用调色板更新背景
+void Widget::updateBackgroundWithPalette(const QVector<QColor> &colors)
+{
+    currentPalette = colors;
+    
+    if (colors.isEmpty()) {
+        setWidgetStyle(QColor(51, 51, 51));
+        flowAnimation->stop();
+        return;
+    }
+    
+    // 更新流动背景的颜色
+    flowingBackground->setColors(colors);
+    
+    // 启动流动动画
+    if (flowAnimation->state() != QAbstractAnimation::Running) {
+        flowAnimation->start();
+    }
+    
+    // 使用调色板设置样式
+    setWidgetStyleWithPalette(colors);
+}
+
 bool Widget::isColorDark(const QColor &color) const
 {
     // 使用亮度公式判断颜色深浅
@@ -983,6 +1202,9 @@ void Widget::setWidgetStyle(const QColor &color)
             background-color: transparent; 
             color: %1;
             font-family: 'Microsoft YaHei';
+        }
+        QLabel#backgroundLabel {
+            background-color: transparent;
         }
         QLineEdit {
             background-color: rgba(0, 0, 0, 0.2);
@@ -1084,8 +1306,148 @@ void Widget::setWidgetStyle(const QColor &color)
     )").arg(foregroundColor, color.name(), darkerColor);
 
     QString mainWidgetStyle = QString(
-        "QWidget#mainWidget { background-color: qradialgradient(cx: 0.5, cy: 0.5, radius: 1.2, fx: 0.5, fy: 0.5, stop: 0 %1, stop: 1 %2); }"
+        "QWidget#mainWidget { background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 1, stop: 0 %1, stop: 1 %2); }"
     ).arg(color.name(), darkerColor);
+    
+    this->setStyleSheet(styleSheet + mainWidgetStyle);
+}
+
+// 使用调色板设置样式（苹果音乐风格）
+void Widget::setWidgetStyleWithPalette(const QVector<QColor> &colors)
+{
+    if (colors.isEmpty()) {
+        setWidgetStyle(QColor(51, 51, 51));
+        return;
+    }
+    
+    QColor primaryColor = colors.first();
+    currentBackgroundColor = primaryColor;
+    
+    // 由于模糊背景有暗色遮罩，始终使用浅色文字
+    QString foregroundColor = "#FFFFFF";
+    QString foregroundColorMuted = "rgba(255, 255, 255, 0.7)";
+    
+    QString darkerColor = colors.last().darker(150).name();
+    
+    QString styleSheet = QString(R"(
+        QWidget {
+            background-color: transparent; 
+            color: %1;
+            font-family: 'Microsoft YaHei';
+        }
+        QLabel#backgroundLabel {
+            background-color: transparent;
+        }
+        QLabel#lyricLabel {
+            color: %2;
+        }
+        QLineEdit {
+            background-color: rgba(0, 0, 0, 0.35);
+            border: none;
+            border-radius: 5px;
+            padding: 5px;
+            color: %1;
+        }
+        QComboBox {
+            background-color: rgba(0, 0, 0, 0.35);
+            border: none;
+            border-radius: 5px;
+            padding: 5px;
+            color: %1;
+        }
+        QComboBox::drop-down {
+            border: none;
+        }
+        QComboBox QAbstractItemView {
+            background-color: rgba(30, 30, 30, 0.95);
+            color: %1;
+            selection-background-color: rgba(255, 255, 255, 0.2);
+            selection-color: %1;
+            border: none;
+            border-radius: 5px;
+        }
+        QPushButton {
+            background-color: rgba(0, 0, 0, 0.35);
+            border: none;
+            border-radius: 5px;
+            padding: 5px 10px;
+            color: %1;
+        }
+        QPushButton:hover {
+            background-color: rgba(255, 255, 255, 0.15);
+        }
+        QPushButton:pressed {
+            background-color: rgba(255, 255, 255, 0.25);
+        }
+        QListWidget {
+            background-color: rgba(0, 0, 0, 0.35);
+            border: none;
+            border-radius: 5px;
+        }
+        QListWidget::item {
+            padding: 10px;
+            background-color: transparent;
+            border-radius: 5px;
+        }
+        QListWidget::item:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        QListWidget::item:selected {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+        QSlider::groove:horizontal {
+            border: none;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.2);
+            margin: 2px 0;
+            border-radius: 2px;
+        }
+        QSlider::handle:horizontal {
+            background: %1;
+            border: none;
+            width: 12px;
+            margin: -4px 0;
+            border-radius: 6px;
+        }
+        QSlider::sub-page:horizontal {
+            background: %1;
+            border: none;
+            height: 4px;
+            border-radius: 2px;
+        }
+        QSlider::groove:vertical {
+            border: none;
+            width: 4px;
+            background: rgba(255, 255, 255, 0.2);
+            margin: 0 2px;
+            border-radius: 2px;
+        }
+        QSlider::handle:vertical {
+            background: %1;
+            border: none;
+            height: 12px;
+            margin: 0 -4px;
+            border-radius: 6px;
+        }
+        QSlider::add-page:vertical {
+            background: %1;
+            border: none;
+            width: 4px;
+            border-radius: 2px;
+        }
+        QMenu {
+            background-color: rgba(30, 30, 30, 0.95);
+            border: none;
+            border-radius: 5px;
+            padding: 5px;
+            color: %1;
+        }
+    )").arg(foregroundColor, foregroundColorMuted);
+
+    // 背景使用半透明以便看到模糊背景
+    QString mainWidgetStyle = QString(
+        "QWidget#mainWidget { background-color: rgba(0, 0, 0, 0.1); }"
+    );
     
     this->setStyleSheet(styleSheet + mainWidgetStyle);
 }
@@ -1126,6 +1488,10 @@ void Widget::onTrayIconActivated(QSystemTrayIcon::ActivationReason reason)
 void Widget::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
+    
+    // 调整流动背景大小
+    flowingBackground->setGeometry(0, 0, this->width(), this->height());
+    
     if (!originalAlbumArt.isNull())
     {
         int size = qMin(this->width(), this->height()) * 0.6;
