@@ -1,6 +1,6 @@
 #include "widget.h"
-#include "apimanager.h"
-#include "playlistmanager.h" // 集成播放列表
+#include "core/apimanager.h"
+#include "core/playlistmanager.h" // 集成播放列表
 #include <QLineEdit>
 #include <QPushButton>
 #include <QListWidget>

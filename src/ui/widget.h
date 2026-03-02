@@ -10,7 +10,7 @@
 #include <QCloseEvent>
 #include <QSystemTrayIcon>
 #include <QTimer>
-#include "playlistmanager.h" // 引入播放列表管理器
+#include "core/playlistmanager.h" // 引入播放列表管理器
 
 // 搜索源枚举声明
 enum class SearchSource;
