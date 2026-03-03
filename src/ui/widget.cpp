@@ -46,15 +46,15 @@ FloatingIsland::FloatingIsland(QWidget *parent)
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
     setAttribute(Qt::WA_TranslucentBackground);
     setAttribute(Qt::WA_ShowWithoutActivating);
-    setFixedSize(300, 50);
+    setFixedSize(300, 45);
 
     // 创建控件
     coverLabel = new QLabel(this);
-    coverLabel->setFixedSize(36, 36);
+    coverLabel->setFixedSize(32, 32);
     coverLabel->setScaledContents(true);
 
     songNameLabel = new QLabel("未在播放", this);
-    songNameLabel->setStyleSheet("color: white; font-weight: bold; font-size: 12px; background: transparent;");
+    songNameLabel->setStyleSheet("color: white; font-weight: bold; font-size: 11px; background: transparent;");
     songNameLabel->setMaximumWidth(130);
 
     artistLabel = new QLabel("", this);
@@ -63,28 +63,28 @@ FloatingIsland::FloatingIsland(QWidget *parent)
 
     prevBtn = new QPushButton(this);
     prevBtn->setIcon(QIcon(":/icons/previous.png"));
-    prevBtn->setIconSize(QSize(16, 16));
-    prevBtn->setFixedSize(26, 26);
-    prevBtn->setStyleSheet("QPushButton { background: rgba(255,255,255,0.15); border: none; border-radius: 13px; }"
+    prevBtn->setIconSize(QSize(14, 14));
+    prevBtn->setFixedSize(22, 22);
+    prevBtn->setStyleSheet("QPushButton { background: rgba(255,255,255,0.15); border: none; border-radius: 11px; }"
                           "QPushButton:hover { background: rgba(255,255,255,0.25); }");
 
     playPauseBtn = new QPushButton(this);
     playPauseBtn->setIcon(QIcon(":/icons/play.png"));
-    playPauseBtn->setIconSize(QSize(18, 18));
-    playPauseBtn->setFixedSize(26, 26);
-    playPauseBtn->setStyleSheet("QPushButton { background: rgba(255,255,255,0.2); border: none; border-radius: 13px; }"
+    playPauseBtn->setIconSize(QSize(16, 16));
+    playPauseBtn->setFixedSize(22, 22);
+    playPauseBtn->setStyleSheet("QPushButton { background: rgba(255,255,255,0.2); border: none; border-radius: 11px; }"
                                "QPushButton:hover { background: rgba(255,255,255,0.3); }");
 
     nextBtn = new QPushButton(this);
     nextBtn->setIcon(QIcon(":/icons/next.png"));
-    nextBtn->setIconSize(QSize(16, 16));
-    nextBtn->setFixedSize(26, 26);
-    nextBtn->setStyleSheet("QPushButton { background: rgba(255,255,255,0.15); border: none; border-radius: 13px; }"
+    nextBtn->setIconSize(QSize(14, 14));
+    nextBtn->setFixedSize(22, 22);
+    nextBtn->setStyleSheet("QPushButton { background: rgba(255,255,255,0.15); border: none; border-radius: 11px; }"
                           "QPushButton:hover { background: rgba(255,255,255,0.25); }");
 
     // 布局 - 增大边距
     QHBoxLayout *mainLayout = new QHBoxLayout(this);
-    mainLayout->setContentsMargins(10, 7, 10, 7);
+    mainLayout->setContentsMargins(10, 6, 10, 6);
     mainLayout->setSpacing(8);
     mainLayout->addWidget(coverLabel);
 
@@ -116,16 +116,16 @@ void FloatingIsland::setSongInfo(const QString &name, const QString &artist, con
     artistLabel->setText(artist);
     if (!cover.isNull()) {
         // 创建圆角封面
-        QPixmap scaledCover = cover.scaled(36, 36, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+        QPixmap scaledCover = cover.scaled(32, 32, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
 
         // 创建圆角蒙版
-        QPixmap roundedCover(36, 36);
+        QPixmap roundedCover(32, 32);
         roundedCover.fill(Qt::transparent);
 
         QPainter painter(&roundedCover);
         painter.setRenderHint(QPainter::Antialiasing);
         QPainterPath path;
-        path.addRoundedRect(0, 0, 36, 36, 7, 7);
+        path.addRoundedRect(0, 0, 32, 32, 6, 6);
         painter.setClipPath(path);
         painter.drawPixmap(0, 0, scaledCover);
         painter.end();
@@ -156,7 +156,7 @@ void FloatingIsland::paintEvent(QPaintEvent *event)
 
     // 绘制圆角背景
     QPainterPath path;
-    path.addRoundedRect(rect(), 22, 22);
+    path.addRoundedRect(rect(), 21, 21);
 
     // 绘制模糊背景
     if (!blurredBackground.isNull()) {

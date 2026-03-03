@@ -64,6 +64,13 @@ set(RESOURCES
 )
 
 # -------------------------------------------------
+# Windows 资源文件（用于设置 exe 图标）
+# -------------------------------------------------
+if(WIN32)
+    set(WIN_RESOURCES ${RESOURCES_DIR}/app.rc)
+endif()
+
+# -------------------------------------------------
 # 可执行目标
 # -------------------------------------------------
 qt_add_executable(melody
@@ -71,6 +78,7 @@ qt_add_executable(melody
     MANUAL_FINALIZATION
     ${ALL_SOURCES}
     ${RESOURCES}
+    ${WIN_RESOURCES}
 )
 
 # -------------------------------------------------
