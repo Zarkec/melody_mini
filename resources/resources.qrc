@@ -1,5 +1,20 @@
 <!DOCTYPE RCC><RCC version="1.0">
 <qresource prefix="/">
     <file>logo.png</file>
+    <file>icons/play.png</file>
+    <file>icons/pause.png</file>
+    <file>icons/previous.png</file>
+    <file>icons/next.png</file>
+    <file>icons/volume-high.png</file>
+    <file>icons/volume-medium.png</file>
+    <file>icons/volume-low.png</file>
+    <file>icons/volume-mute.png</file>
+    <file>icons/loop-list.png</file>
+    <file>icons/loop-one.png</file>
+    <file>icons/shuffle.png</file>
+    <file>icons/previous-page.png</file>
+    <file>icons/next-page.png</file>
+    <file>icons/back.png</file>
+    <file>icons/search.png</file>
 </qresource>
 </RCC>

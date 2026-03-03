@@ -130,6 +130,8 @@ private slots:
     void playPreviousSong();
     void changePlayMode();
 
+    void updateVolumeIcon(int volume);
+
     // 搜索源切换
     void onSearchSourceChanged(int index);
 

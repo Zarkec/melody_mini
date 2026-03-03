@@ -227,8 +227,12 @@ Widget::Widget(QWidget *parent)
     // --- UI 控件初始化 ---
     searchInput = new QLineEdit;
     searchInput->setPlaceholderText("输入歌名或歌手...");
-    searchButton = new QPushButton("搜索");
-    backButton = new QPushButton("返回");
+    searchButton = new QPushButton;
+    searchButton->setIcon(QIcon(":/icons/search.png"));
+    searchButton->setToolTip("搜索");
+    backButton = new QPushButton;
+    backButton->setIcon(QIcon(":/icons/back.png"));
+    backButton->setToolTip("返回");
     backButton->setVisible(false); // 默认隐藏
     resultList = new QListWidget;
 
@@ -237,29 +241,39 @@ Widget::Widget(QWidget *parent)
     searchSourceCombo->addItem("网易云音乐");
     searchSourceCombo->addItem("Bilibili");
     searchSourceCombo->setFixedWidth(90);
-    playPauseButton = new QPushButton("▶");
-    prevButton = new QPushButton("⏮");
-    nextButton = new QPushButton("⏭");
-    playModeButton = new QPushButton("顺序"); // 初始化播放模式按钮
+    playPauseButton = new QPushButton;
+    playPauseButton->setIcon(QIcon(":/icons/play.png"));
+    prevButton = new QPushButton;
+    prevButton->setIcon(QIcon(":/icons/previous.png"));
+    nextButton = new QPushButton;
+    nextButton->setIcon(QIcon(":/icons/next.png"));
+    playModeButton = new QPushButton;
+    playModeButton->setIcon(QIcon(":/icons/loop-list.png"));
     progressSlider = new QSlider(Qt::Horizontal);
     timeLabel = new QLabel("00:00 / 00:00");
 
     // --- 分页控件 ---
     paginationWidget = new QWidget;
-    prevPageButton = new QPushButton("< 上一页");
-    nextPageButton = new QPushButton("下一页 >");
+    prevPageButton = new QPushButton;
+    prevPageButton->setIcon(QIcon(":/icons/previous-page.png"));
+    prevPageButton->setToolTip("上一页");
+    nextPageButton = new QPushButton;
+    nextPageButton->setIcon(QIcon(":/icons/next-page.png"));
+    nextPageButton->setToolTip("下一页");
     pageLabel = new QLabel("第 1 页");
     prevPageButton->setEnabled(false); // 初始时禁用
     nextPageButton->setEnabled(false); // 初始时禁用
 
     // --- 音量控制 ---
-    volumeButton = new QPushButton("🔊"); // 使用Emoji作为图标
-    volumeButton->setFlat(true); // 使按钮看起来更像一个图标
+    volumeButton = new QPushButton;
+    volumeButton->setIcon(QIcon(":/icons/volume-high.png"));
+    volumeButton->setFlat(true);
 
     volumeSlider = new QSlider(Qt::Vertical); // 设置为垂直
     volumeSlider->setRange(0, 100);
     volumeSlider->setValue(50);
     volumeSlider->setFixedHeight(100); // 设置高度
+    updateVolumeIcon(50);
 
     volumeMenu = new QMenu(this);
     volumeAction = new QWidgetAction(this);
@@ -405,6 +419,7 @@ Widget::Widget(QWidget *parent)
     connect(volumeButton, &QPushButton::clicked, this, &Widget::onVolumeButtonClicked); // 连接音量按钮
     connect(volumeSlider, &QSlider::valueChanged, this, [this](int value) {
         audioOutput->setVolume(value / 100.0);
+        updateVolumeIcon(value);
     });
     connect(mediaPlayer, &QMediaPlayer::positionChanged, this, &Widget::updatePosition);
     connect(mediaPlayer, &QMediaPlayer::durationChanged, this, &Widget::updateDuration);
@@ -459,7 +474,7 @@ void Widget::onSearchButtonClicked()
         currentPage = 1; // 每次新搜索都重置为第一页
         mainStackedWidget->setCurrentWidget(resultList);
         searchButton->setEnabled(false);
-        searchButton->setText("搜索中...");
+        searchButton->setToolTip("搜索中...");
 
         // 根据搜索源调用不同的API
         if (currentSearchSource == SearchSource::NetEase) {
@@ -489,7 +504,7 @@ void Widget::onSearchSourceChanged(int index)
 void Widget::onSearchFinished(const QJsonDocument &json)
 {
     searchButton->setEnabled(true);
-    searchButton->setText("搜索");
+    searchButton->setToolTip("搜索");
     resultList->clear(); // 清空列表
 
     searchResultSongs.clear(); // 清空旧的歌曲数据
@@ -541,7 +556,7 @@ void Widget::onSearchFinished(const QJsonDocument &json)
 void Widget::onBilibiliSearchFinished(const QJsonDocument &json)
 {
     searchButton->setEnabled(true);
-    searchButton->setText("搜索");
+    searchButton->setToolTip("搜索");
     resultList->clear();
     searchResultSongs.clear();
 
@@ -778,7 +793,7 @@ void Widget::onApiError(const QString &errorString)
     }
 
     searchButton->setEnabled(true);
-    searchButton->setText("搜索");
+    searchButton->setToolTip("搜索");
     QMessageBox::critical(this, "网络错误", errorString);
 }
 
@@ -876,15 +891,14 @@ void Widget::updateDuration(qint64 duration)
 void Widget::updateState(QMediaPlayer::PlaybackState state)
 {
     if (state == QMediaPlayer::PlayingState) {
-        playPauseButton->setText("⏸");
+        playPauseButton->setIcon(QIcon(":/icons/pause.png"));
 
-        // 隐藏Bilibili加载动画（如果正在显示），显示播放按钮
         if (loadingSpinner->isVisible()) {
             loadingSpinner->stop();
             playPauseButton->show();
         }
     } else {
-        playPauseButton->setText("▶");
+        playPauseButton->setIcon(QIcon(":/icons/play.png"));
     }
 }
 
@@ -1002,22 +1016,36 @@ void Widget::playPreviousSong()
 void Widget::changePlayMode()
 {
     PlaylistManager::PlayMode currentMode = playlistManager->getPlayMode();
-    // 循环切换模式
     int nextModeIndex = (static_cast<int>(currentMode) + 1) % 3;
     PlaylistManager::PlayMode nextMode = static_cast<PlaylistManager::PlayMode>(nextModeIndex);
     playlistManager->setPlayMode(nextMode);
 
-    // 更新UI图标和提示
     switch(nextMode) {
         case PlaylistManager::Sequential:
-            playModeButton->setText("顺序");
+            playModeButton->setIcon(QIcon(":/icons/loop-list.png"));
+            playModeButton->setToolTip("顺序播放");
             break;
         case PlaylistManager::LoopOne:
-            playModeButton->setText("单曲");
+            playModeButton->setIcon(QIcon(":/icons/loop-one.png"));
+            playModeButton->setToolTip("单曲循环");
             break;
         case PlaylistManager::Random:
-            playModeButton->setText("随机");
+            playModeButton->setIcon(QIcon(":/icons/shuffle.png"));
+            playModeButton->setToolTip("随机播放");
             break;
+    }
+}
+
+void Widget::updateVolumeIcon(int volume)
+{
+    if (volume == 0) {
+        volumeButton->setIcon(QIcon(":/icons/volume-mute.png"));
+    } else if (volume < 30) {
+        volumeButton->setIcon(QIcon(":/icons/volume-low.png"));
+    } else if (volume < 70) {
+        volumeButton->setIcon(QIcon(":/icons/volume-medium.png"));
+    } else {
+        volumeButton->setIcon(QIcon(":/icons/volume-high.png"));
     }
 }
 
@@ -1026,7 +1054,7 @@ void Widget::onPrevPageButtonClicked()
     if (currentPage > 1) {
         currentPage--;
         searchButton->setEnabled(false);
-        searchButton->setText("加载中...");
+        searchButton->setToolTip("加载中...");
         if (currentSearchSource == SearchSource::NetEase) {
             apiManager->searchSongs(currentSearchKeywords, 15, (currentPage - 1) * 15);
         } else {
@@ -1040,7 +1068,7 @@ void Widget::onNextPageButtonClicked()
     // 这里的总页数判断依赖于 onSearchFinished 的结果
     currentPage++;
     searchButton->setEnabled(false);
-    searchButton->setText("加载中...");
+    searchButton->setToolTip("加载中...");
     if (currentSearchSource == SearchSource::NetEase) {
         apiManager->searchSongs(currentSearchKeywords, 15, (currentPage - 1) * 15);
     } else {
