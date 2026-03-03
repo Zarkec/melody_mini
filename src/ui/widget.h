@@ -2,6 +2,7 @@
 #define WIDGET_H
 
 #include <QWidget>
+#include <QLabel>
 #include <QJsonDocument>
 #include <QMediaPlayer>
 #include <QMap>
@@ -10,6 +11,7 @@
 #include <QCloseEvent>
 #include <QSystemTrayIcon>
 #include <QTimer>
+#include <QMovie>
 #include "core/playlistmanager.h" // 引入播放列表管理器
 
 // 搜索源枚举声明
@@ -19,23 +21,16 @@ enum class SearchSource;
 class LoadingSpinner : public QWidget
 {
     Q_OBJECT
-    Q_PROPERTY(int angle READ angle WRITE setAngle)
 
 public:
     explicit LoadingSpinner(QWidget *parent = nullptr);
     QSize sizeHint() const override;
-    int angle() const { return m_angle; }
-    void setAngle(int angle);
-    void start() { m_timer->start(30); show(); }
-    void stop() { m_timer->stop(); hide(); }
-
-protected:
-    void paintEvent(QPaintEvent *event) override;
+    void start();
+    void stop();
 
 private:
-    int m_angle = 0;
-    QTimer *m_timer;
-    QColor m_color;
+    QLabel *m_label;
+    QMovie *m_movie;
 };
 
 // 动态流动背景控件（苹果音乐风格）
@@ -87,6 +82,56 @@ class QWidgetAction;
 class QAction;
 class QComboBox;
 
+// 悬浮灵动岛窗口
+class FloatingIsland : public QWidget
+{
+    Q_OBJECT
+
+public:
+    explicit FloatingIsland(QWidget *parent = nullptr);
+    void setSongInfo(const QString &name, const QString &artist, const QPixmap &cover);
+    void setPlaying(bool playing);
+    void setPosition(qint64 position, qint64 duration);
+    void updateBackground(); // 更新模糊背景
+
+protected:
+    void paintEvent(QPaintEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
+    void mouseDoubleClickEvent(QMouseEvent *event) override;
+    void enterEvent(QEnterEvent *event) override;
+    void leaveEvent(QEvent *event) override;
+    void showEvent(QShowEvent *event) override;
+    void moveEvent(QMoveEvent *event) override;
+
+private slots:
+    void onPrevClicked();
+    void onPlayPauseClicked();
+    void onNextClicked();
+
+signals:
+    void prevClicked();
+    void playPauseClicked();
+    void nextClicked();
+    void expandClicked();
+
+private:
+    QLabel *coverLabel;
+    QLabel *songNameLabel;
+    QLabel *artistLabel;
+    QPushButton *prevBtn;
+    QPushButton *playPauseBtn;
+    QPushButton *nextBtn;
+    bool isPlaying;
+    bool isHovering;
+    bool isDragging;
+    QPoint dragStartPos;
+    QPoint windowStartPos;
+    QPoint originalPos; // 原始位置，用于双击复原
+    QPixmap blurredBackground; // 模糊背景
+};
+
 class Widget : public QWidget
 {
     Q_OBJECT
@@ -137,6 +182,10 @@ private slots:
 
     // 音量控制
     void onVolumeButtonClicked();
+
+    // 悬浮窗控制
+    void onMinimizeButtonClicked();
+    void onFloatingExpandClicked();
 
     // UI控制
     void onBackButtonClicked();
@@ -191,6 +240,8 @@ private:
     QMenu *volumeMenu;         // 新增音量菜单
     QWidgetAction *volumeAction; // 用于将Slider放入Menu
     QPushButton *backButton; // 新增返回按钮
+    QPushButton *minimizeButton; // 新增缩小按钮
+    FloatingIsland *floatingIsland; // 新增悬浮灵动岛
 
     // 播放详情页
     QStackedWidget *mainStackedWidget;

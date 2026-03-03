@@ -16,5 +16,8 @@
     <file>icons/next-page.png</file>
     <file>icons/back.png</file>
     <file>icons/search.png</file>
+    <file>icons/minimize.png</file>
+    <file>icons/maximize.png</file>
+    <file>icons/loading.gif</file>
 </qresource>
 </RCC>

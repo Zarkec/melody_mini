@@ -31,74 +31,282 @@
 #include <QPainterPath>
 #include <QEasingCurve>
 #include <QtMath>
+#include <QMouseEvent>
+#include <QScreen>
+#include <QGuiApplication>
+#include <QGraphicsBlurEffect>
+#include <QGraphicsScene>
+#include <QGraphicsPixmapItem>
 
-// --- LoadingSpinner 实现 ---
-LoadingSpinner::LoadingSpinner(QWidget *parent)
-    : QWidget(parent), m_color(100, 180, 255)
+// --- FloatingIsland 实现 ---
+FloatingIsland::FloatingIsland(QWidget *parent)
+    : QWidget(parent), isPlaying(false), isHovering(false), isDragging(false)
 {
-    setFixedSize(32, 32);
-    m_timer = new QTimer(this);
-    connect(m_timer, &QTimer::timeout, this, [this]() {
-        m_angle = (m_angle + 15) % 360;
-        update();
-    });
+    // 设置窗口属性
+    setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
+    setAttribute(Qt::WA_TranslucentBackground);
+    setAttribute(Qt::WA_ShowWithoutActivating);
+    setFixedSize(300, 50);
+
+    // 创建控件
+    coverLabel = new QLabel(this);
+    coverLabel->setFixedSize(36, 36);
+    coverLabel->setScaledContents(true);
+
+    songNameLabel = new QLabel("未在播放", this);
+    songNameLabel->setStyleSheet("color: white; font-weight: bold; font-size: 12px; background: transparent;");
+    songNameLabel->setMaximumWidth(130);
+
+    artistLabel = new QLabel("", this);
+    artistLabel->setStyleSheet("color: rgba(255,255,255,180); font-size: 10px; background: transparent;");
+    artistLabel->setMaximumWidth(130);
+
+    prevBtn = new QPushButton(this);
+    prevBtn->setIcon(QIcon(":/icons/previous.png"));
+    prevBtn->setIconSize(QSize(16, 16));
+    prevBtn->setFixedSize(26, 26);
+    prevBtn->setStyleSheet("QPushButton { background: rgba(255,255,255,0.15); border: none; border-radius: 13px; }"
+                          "QPushButton:hover { background: rgba(255,255,255,0.25); }");
+
+    playPauseBtn = new QPushButton(this);
+    playPauseBtn->setIcon(QIcon(":/icons/play.png"));
+    playPauseBtn->setIconSize(QSize(18, 18));
+    playPauseBtn->setFixedSize(26, 26);
+    playPauseBtn->setStyleSheet("QPushButton { background: rgba(255,255,255,0.2); border: none; border-radius: 13px; }"
+                               "QPushButton:hover { background: rgba(255,255,255,0.3); }");
+
+    nextBtn = new QPushButton(this);
+    nextBtn->setIcon(QIcon(":/icons/next.png"));
+    nextBtn->setIconSize(QSize(16, 16));
+    nextBtn->setFixedSize(26, 26);
+    nextBtn->setStyleSheet("QPushButton { background: rgba(255,255,255,0.15); border: none; border-radius: 13px; }"
+                          "QPushButton:hover { background: rgba(255,255,255,0.25); }");
+
+    // 布局 - 增大边距
+    QHBoxLayout *mainLayout = new QHBoxLayout(this);
+    mainLayout->setContentsMargins(10, 7, 10, 7);
+    mainLayout->setSpacing(8);
+    mainLayout->addWidget(coverLabel);
+
+    QVBoxLayout *infoLayout = new QVBoxLayout();
+    infoLayout->setSpacing(2);
+    infoLayout->addWidget(songNameLabel);
+    infoLayout->addWidget(artistLabel);
+    mainLayout->addLayout(infoLayout);
+    mainLayout->addStretch();
+
+    QHBoxLayout *btnLayout = new QHBoxLayout();
+    btnLayout->setSpacing(6);
+    btnLayout->addWidget(prevBtn);
+    btnLayout->addWidget(playPauseBtn);
+    btnLayout->addWidget(nextBtn);
+    mainLayout->addLayout(btnLayout);
+
+    setLayout(mainLayout);
+
+    // 连接信号
+    connect(prevBtn, &QPushButton::clicked, this, &FloatingIsland::onPrevClicked);
+    connect(playPauseBtn, &QPushButton::clicked, this, &FloatingIsland::onPlayPauseClicked);
+    connect(nextBtn, &QPushButton::clicked, this, &FloatingIsland::onNextClicked);
 }
 
-QSize LoadingSpinner::sizeHint() const
+void FloatingIsland::setSongInfo(const QString &name, const QString &artist, const QPixmap &cover)
 {
-    return QSize(32, 32);
-}
+    songNameLabel->setText(name);
+    artistLabel->setText(artist);
+    if (!cover.isNull()) {
+        // 创建圆角封面
+        QPixmap scaledCover = cover.scaled(36, 36, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
 
-void LoadingSpinner::setAngle(int angle)
-{
-    if (m_angle != angle) {
-        m_angle = angle;
-        update();
+        // 创建圆角蒙版
+        QPixmap roundedCover(36, 36);
+        roundedCover.fill(Qt::transparent);
+
+        QPainter painter(&roundedCover);
+        painter.setRenderHint(QPainter::Antialiasing);
+        QPainterPath path;
+        path.addRoundedRect(0, 0, 36, 36, 7, 7);
+        painter.setClipPath(path);
+        painter.drawPixmap(0, 0, scaledCover);
+        painter.end();
+
+        coverLabel->setPixmap(roundedCover);
     }
+    update();
 }
 
-void LoadingSpinner::paintEvent(QPaintEvent *event)
+void FloatingIsland::setPlaying(bool playing)
+{
+    isPlaying = playing;
+    playPauseBtn->setIcon(QIcon(playing ? ":/icons/pause.png" : ":/icons/play.png"));
+}
+
+void FloatingIsland::setPosition(qint64 position, qint64 duration)
+{
+    Q_UNUSED(position);
+    Q_UNUSED(duration);
+    // 可扩展：显示进度
+}
+
+void FloatingIsland::paintEvent(QPaintEvent *event)
 {
     Q_UNUSED(event);
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
 
-    int side = qMin(width(), height());
-    painter.translate(width() / 2.0, height() / 2.0);
-    painter.scale(side / 32.0, side / 32.0);
+    // 绘制圆角背景
+    QPainterPath path;
+    path.addRoundedRect(rect(), 22, 22);
 
-    // 绘制底层淡色圆环
-    painter.setPen(QPen(QColor(100, 180, 255, 50), 3));
-    painter.setBrush(Qt::NoBrush);
-    painter.drawEllipse(QPointF(0, 0), 11, 11);
+    // 绘制模糊背景
+    if (!blurredBackground.isNull()) {
+        painter.setClipPath(path);
+        painter.drawPixmap(0, 0, blurredBackground);
+        // 添加半透明遮罩增强效果 - 更黑的颜色
+        QColor overlayColor = isHovering ? QColor(15, 15, 18, 200) : QColor(5, 5, 8, 220);
+        painter.fillPath(path, overlayColor);
+    } else {
+        QColor bgColor = isHovering ? QColor(25, 25, 28, 250) : QColor(10, 10, 15, 245);
+        painter.fillPath(path, bgColor);
+    }
+}
 
-    // 绘制旋转的渐变圆弧（接近完整的圆环）
-    QConicalGradient gradient(0, 0, m_angle);
-    gradient.setColorAt(0, m_color);
-    gradient.setColorAt(0.5, m_color.lighter(140));
-    gradient.setColorAt(0.8, QColor(100, 180, 255, 100));
-    gradient.setColorAt(1, QColor(100, 180, 255, 30));
+void FloatingIsland::showEvent(QShowEvent *event)
+{
+    Q_UNUSED(event);
+    updateBackground();
+}
 
-    QPen pen(QBrush(gradient), 3);
-    pen.setCapStyle(Qt::RoundCap);
-    painter.setPen(pen);
+void FloatingIsland::moveEvent(QMoveEvent *event)
+{
+    Q_UNUSED(event);
+    updateBackground();
+}
 
-    QRectF rect(-11, -11, 22, 22);
-    // 绘制接近完整的圆环（330度），留一个小缺口产生旋转效果
-    painter.drawArc(rect, m_angle * 16, -330 * 16);
+void FloatingIsland::updateBackground()
+{
+    // 截取窗口背后的屏幕区域
+    QScreen *screen = QGuiApplication::screenAt(pos());
+    if (!screen) screen = QGuiApplication::primaryScreen();
 
-    // 绘制头部发光圆点
-    qreal rad = qDegreesToRadians(static_cast<qreal>(m_angle));
-    qreal dotX = 11 * qCos(rad);
-    qreal dotY = -11 * qSin(rad);
+    QRect windowRect(pos(), size());
+    QPixmap screenshot = screen->grabWindow(0, windowRect.x(), windowRect.y(), windowRect.width(), windowRect.height());
 
-    QRadialGradient dotGradient(dotX, dotY, 5);
-    dotGradient.setColorAt(0, QColor(255, 255, 255, 200));
-    dotGradient.setColorAt(0.5, m_color.lighter(130));
-    dotGradient.setColorAt(1, QColor(100, 180, 255, 0));
-    painter.setBrush(dotGradient);
-    painter.setPen(Qt::NoPen);
-    painter.drawEllipse(QPointF(dotX, dotY), 4, 4);
+    // 应用高斯模糊 - 更大的模糊半径
+    if (!screenshot.isNull()) {
+        QGraphicsScene scene;
+        QGraphicsPixmapItem item;
+        item.setPixmap(screenshot);
+
+        QGraphicsBlurEffect blur;
+        blur.setBlurRadius(50);
+        blur.setBlurHints(QGraphicsBlurEffect::QualityHint);
+        item.setGraphicsEffect(&blur);
+
+        scene.addItem(&item);
+
+        blurredBackground = QPixmap(size());
+        blurredBackground.fill(Qt::transparent);
+
+        QPainter painter(&blurredBackground);
+        scene.render(&painter, QRectF(), QRectF(0, 0, screenshot.width(), screenshot.height()));
+        painter.end();
+
+        update();
+    }
+}
+
+void FloatingIsland::mousePressEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton) {
+        isDragging = true;
+        dragStartPos = event->globalPosition().toPoint();
+        windowStartPos = pos();
+    }
+}
+
+void FloatingIsland::mouseMoveEvent(QMouseEvent *event)
+{
+    if (isDragging) {
+        QPoint currentPos = event->globalPosition().toPoint();
+        QPoint delta = currentPos - dragStartPos;
+        move(windowStartPos + delta);
+    }
+}
+
+void FloatingIsland::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton) {
+        isDragging = false;
+    }
+}
+
+void FloatingIsland::mouseDoubleClickEvent(QMouseEvent *event)
+{
+    Q_UNUSED(event);
+    // 双击展开恢复主窗口
+    emit expandClicked();
+}
+
+void FloatingIsland::enterEvent(QEnterEvent *event)
+{
+    Q_UNUSED(event);
+    isHovering = true;
+    update();
+}
+
+void FloatingIsland::leaveEvent(QEvent *event)
+{
+    Q_UNUSED(event);
+    isHovering = false;
+    update();
+}
+
+void FloatingIsland::onPrevClicked()
+{
+    emit prevClicked();
+}
+
+void FloatingIsland::onPlayPauseClicked()
+{
+    emit playPauseClicked();
+}
+
+void FloatingIsland::onNextClicked()
+{
+    emit nextClicked();
+}
+
+// --- LoadingSpinner 实现 ---
+LoadingSpinner::LoadingSpinner(QWidget *parent)
+    : QWidget(parent)
+{
+    setFixedSize(28, 28);
+    m_label = new QLabel(this);
+    m_label->setAlignment(Qt::AlignCenter);
+    m_label->setGeometry(0, 0, 28, 28);
+
+    m_movie = new QMovie(":/icons/loading.gif");
+    m_movie->setScaledSize(QSize(28, 28));
+    m_label->setMovie(m_movie);
+    hide();
+}
+
+QSize LoadingSpinner::sizeHint() const
+{
+    return QSize(28, 28);
+}
+
+void LoadingSpinner::start()
+{
+    m_movie->start();
+    show();
+}
+
+void LoadingSpinner::stop()
+{
+    m_movie->stop();
+    hide();
 }
 
 // --- FlowingBackground 实现 ---
@@ -229,10 +437,14 @@ Widget::Widget(QWidget *parent)
     searchInput->setPlaceholderText("输入歌名或歌手...");
     searchButton = new QPushButton;
     searchButton->setIcon(QIcon(":/icons/search.png"));
+    searchButton->setIconSize(QSize(20, 20));
     searchButton->setToolTip("搜索");
+    searchButton->setFixedSize(28, 28);
     backButton = new QPushButton;
     backButton->setIcon(QIcon(":/icons/back.png"));
+    backButton->setIconSize(QSize(20, 20));
     backButton->setToolTip("返回");
+    backButton->setFixedSize(28, 28);
     backButton->setVisible(false); // 默认隐藏
     resultList = new QListWidget;
 
@@ -243,12 +455,20 @@ Widget::Widget(QWidget *parent)
     searchSourceCombo->setFixedWidth(90);
     playPauseButton = new QPushButton;
     playPauseButton->setIcon(QIcon(":/icons/play.png"));
+    playPauseButton->setIconSize(QSize(24, 24));
+    playPauseButton->setFixedSize(28, 28);
     prevButton = new QPushButton;
     prevButton->setIcon(QIcon(":/icons/previous.png"));
+    prevButton->setIconSize(QSize(20, 20));
+    prevButton->setFixedSize(28, 28);
     nextButton = new QPushButton;
     nextButton->setIcon(QIcon(":/icons/next.png"));
+    nextButton->setIconSize(QSize(20, 20));
+    nextButton->setFixedSize(28, 28);
     playModeButton = new QPushButton;
     playModeButton->setIcon(QIcon(":/icons/loop-list.png"));
+    playModeButton->setIconSize(QSize(20, 20));
+    playModeButton->setFixedSize(28, 28);
     progressSlider = new QSlider(Qt::Horizontal);
     timeLabel = new QLabel("00:00 / 00:00");
 
@@ -256,10 +476,14 @@ Widget::Widget(QWidget *parent)
     paginationWidget = new QWidget;
     prevPageButton = new QPushButton;
     prevPageButton->setIcon(QIcon(":/icons/previous-page.png"));
+    prevPageButton->setIconSize(QSize(20, 20));
     prevPageButton->setToolTip("上一页");
+    prevPageButton->setFixedSize(28, 28);
     nextPageButton = new QPushButton;
     nextPageButton->setIcon(QIcon(":/icons/next-page.png"));
+    nextPageButton->setIconSize(QSize(20, 20));
     nextPageButton->setToolTip("下一页");
+    nextPageButton->setFixedSize(28, 28);
     pageLabel = new QLabel("第 1 页");
     prevPageButton->setEnabled(false); // 初始时禁用
     nextPageButton->setEnabled(false); // 初始时禁用
@@ -267,7 +491,15 @@ Widget::Widget(QWidget *parent)
     // --- 音量控制 ---
     volumeButton = new QPushButton;
     volumeButton->setIcon(QIcon(":/icons/volume-high.png"));
-    volumeButton->setFlat(true);
+    volumeButton->setIconSize(QSize(20, 20));
+    volumeButton->setFixedSize(28, 28);
+
+    // --- 缩小按钮 ---
+    minimizeButton = new QPushButton;
+    minimizeButton->setIcon(QIcon(":/icons/minimize.png"));
+    minimizeButton->setIconSize(QSize(20, 20));
+    minimizeButton->setToolTip("迷你模式");
+    minimizeButton->setFixedSize(28, 28);
 
     volumeSlider = new QSlider(Qt::Vertical); // 设置为垂直
     volumeSlider->setRange(0, 100);
@@ -343,6 +575,10 @@ Widget::Widget(QWidget *parent)
 
     // 第二行：控制按钮
     QHBoxLayout *controlsLayout = new QHBoxLayout;
+    // 左侧占位符，平衡右边的 minimizeButton
+    QWidget *leftSpacer = new QWidget;
+    leftSpacer->setFixedSize(28, 28);
+    controlsLayout->addWidget(leftSpacer);
     controlsLayout->addWidget(playModeButton);
     controlsLayout->addStretch();
     controlsLayout->addWidget(prevButton);
@@ -350,6 +586,7 @@ Widget::Widget(QWidget *parent)
     controlsLayout->addWidget(loadingSpinner);  // 加载动画控件
     controlsLayout->addWidget(nextButton);
     controlsLayout->addStretch();
+    controlsLayout->addWidget(minimizeButton); // 缩小按钮
     controlsLayout->addWidget(volumeButton);
 
     // 垂直整合底部所有控件
@@ -463,9 +700,22 @@ Widget::Widget(QWidget *parent)
     // trayIcon->show(); 
 
     connect(trayIcon, &QSystemTrayIcon::activated, this, &Widget::onTrayIconActivated);
+
+    // --- 悬浮灵动岛初始化 ---
+    floatingIsland = new FloatingIsland();
+    connect(floatingIsland, &FloatingIsland::prevClicked, this, &Widget::playPreviousSong);
+    connect(floatingIsland, &FloatingIsland::playPauseClicked, this, &Widget::onPlayPauseButtonClicked);
+    connect(floatingIsland, &FloatingIsland::nextClicked, this, &Widget::playNextSong);
+    connect(floatingIsland, &FloatingIsland::expandClicked, this, &Widget::onFloatingExpandClicked);
+    connect(minimizeButton, &QPushButton::clicked, this, &Widget::onMinimizeButtonClicked);
 }
 
-Widget::~Widget() {}
+Widget::~Widget()
+{
+    if (floatingIsland) {
+        delete floatingIsland;
+    }
+}
 
 void Widget::onSearchButtonClicked()
 {
@@ -634,6 +884,36 @@ void Widget::onVolumeButtonClicked()
     volumeMenu->exec(pos);
 }
 
+void Widget::onMinimizeButtonClicked()
+{
+    // 更新悬浮窗信息
+    Song currentSong = playlistManager->getCurrentSong();
+    if (!currentSong.name.isEmpty()) {
+        floatingIsland->setSongInfo(currentSong.name, currentSong.artist, originalAlbumArt);
+    }
+    floatingIsland->setPlaying(mediaPlayer->playbackState() == QMediaPlayer::PlayingState);
+
+    // 定位到屏幕顶部中央
+    QScreen *screen = QGuiApplication::primaryScreen();
+    QRect screenGeometry = screen->availableGeometry();
+    int x = screenGeometry.x() + (screenGeometry.width() - floatingIsland->width()) / 2;
+    int y = screenGeometry.y() + 10;
+    floatingIsland->move(x, y);
+    floatingIsland->show();
+
+    // 隐藏主窗口
+    this->hide();
+    trayIcon->show();
+}
+
+void Widget::onFloatingExpandClicked()
+{
+    floatingIsland->hide();
+    this->showNormal();
+    this->activateWindow();
+    trayIcon->hide();
+}
+
 void Widget::onLyricFinished(const QJsonDocument &json)
 {
     lyricData.clear();
@@ -666,7 +946,11 @@ void Widget::onImageDownloaded(const QByteArray &data)
         originalAlbumArt = pixmap;
         int size = qMin(this->width(), this->height()) * 0.6;
         albumArtLabel->setPixmap(originalAlbumArt.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-        
+
+        // 更新悬浮窗封面
+        Song currentSong = playlistManager->getCurrentSong();
+        floatingIsland->setSongInfo(currentSong.name, currentSong.artist, originalAlbumArt);
+
         // 使用调色板提取和模糊背景（苹果音乐风格）
         QVector<QColor> palette = extractPaletteColors(pixmap, 3);
         updateBackgroundWithPalette(palette);
@@ -774,6 +1058,10 @@ void Widget::onBilibiliImageDownloaded(const QByteArray &data)
         originalAlbumArt = pixmap;
         int size = qMin(this->width(), this->height()) * 0.6;
         albumArtLabel->setPixmap(originalAlbumArt.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+
+        // 更新悬浮窗封面
+        Song currentSong = playlistManager->getCurrentSong();
+        floatingIsland->setSongInfo(currentSong.name, currentSong.artist, originalAlbumArt);
 
         // 使用调色板提取和模糊背景（苹果音乐风格）
         QVector<QColor> palette = extractPaletteColors(pixmap, 3);
@@ -900,6 +1188,9 @@ void Widget::updateState(QMediaPlayer::PlaybackState state)
     } else {
         playPauseButton->setIcon(QIcon(":/icons/play.png"));
     }
+
+    // 更新悬浮窗状态
+    floatingIsland->setPlaying(state == QMediaPlayer::PlayingState);
 }
 
 void Widget::setPosition(int position)
@@ -920,6 +1211,8 @@ void Widget::playSong(qint64 id)
     Song currentSong = playlistManager->getCurrentSong();
     if (currentSong.id == id) {
         songNameLabel->setText(currentSong.name);
+        // 更新悬浮窗信息
+        floatingIsland->setSongInfo(currentSong.name, currentSong.artist, QPixmap());
     } else {
         songNameLabel->setText("加载中...");
     }
@@ -955,6 +1248,8 @@ void Widget::playBilibiliVideo(const QString &bvid)
     Song currentSong = playlistManager->getCurrentSong();
     if (currentSong.bvid == bvid) {
         songNameLabel->setText(currentSong.name);
+        // 更新悬浮窗信息
+        floatingIsland->setSongInfo(currentSong.name, currentSong.artist, QPixmap());
     } else {
         songNameLabel->setText("加载中...");
     }
