@@ -16,7 +16,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # -------------------------------------------------
 # Qt（Qt6）
 # -------------------------------------------------
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets Network Multimedia)
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets Network Multimedia)
 
 message(STATUS "Found Qt version: ${Qt6_VERSION}")
 
