@@ -12,6 +12,8 @@
 #include <QSystemTrayIcon>
 #include <QTimer>
 #include <QMovie>
+#include <QBuffer>
+#include <QFile>
 #include "core/playlistmanager.h" // 引入播放列表管理器
 
 // 搜索源枚举声明
@@ -169,6 +171,7 @@ private slots:
     void updateState(QMediaPlayer::PlaybackState state);
     void setPosition(int position);
     void onMediaStatusChanged(QMediaPlayer::MediaStatus status);
+    void checkPlaybackHealth(); // 播放健康检查（看门狗）
 
     // 新增：播放控制
     void playNextSong();
@@ -210,6 +213,7 @@ private:
     void playSong(qint64 id); // 播放网易云音乐歌曲
     void playBilibiliVideo(const QString &bvid); // 播放Bilibili视频
     void parseLyrics(const QString &lyricText);
+    void cleanupPreviousPlayback(); // 清理之前的播放资源
 
     // 动态背景
     QColor extractDominantColor(const QPixmap &pixmap);
@@ -295,5 +299,12 @@ private:
     QMenu *trayIconMenu;
     QAction *showAction;
     QAction *quitAction;
+
+    // 资源管理（修复长时间播放卡住问题）
+    QBuffer *currentAudioBuffer = nullptr; // 当前使用的音频缓冲区
+    QString currentTempAudioFile; // 当前使用的临时音频文件路径
+    QTimer *playbackWatchdog = nullptr; // 播放看门狗定时器
+    qint64 lastPosition = 0; // 上次播放位置（用于检测卡住）
+    int stuckCount = 0; // 卡住计数器
 };
 #endif // WIDGET_H

@@ -623,6 +623,11 @@ Widget::Widget(QWidget *parent)
     
     apiManager = new ApiManager(this);
 
+    // 初始化播放看门狗定时器（用于检测播放卡住）
+    playbackWatchdog = new QTimer(this);
+    playbackWatchdog->setInterval(5000); // 每5秒检查一次
+    connect(playbackWatchdog, &QTimer::timeout, this, &Widget::checkPlaybackHealth);
+
     // --- 信号与槽连接 ---
     connect(mainStackedWidget, &QStackedWidget::currentChanged, this, &Widget::onMainStackCurrentChanged);
     connect(backButton, &QPushButton::clicked, this, &Widget::onBackButtonClicked);
@@ -961,6 +966,9 @@ void Widget::onSongUrlReady(const QUrl &url)
 {
     mediaPlayer->setSource(url);
     mediaPlayer->play();
+
+    // 启动看门狗定时器
+    playbackWatchdog->start();
 }
 
 void Widget::onBilibiliVideoInfoFinished(const QJsonDocument &json)
@@ -1009,27 +1017,33 @@ void Widget::onBilibiliAudioUrlReady(const QUrl &url)
     // 保存URL，如果播放失败会用到
     currentBilibiliAudioUrl = url;
 
+    // 启动看门狗定时器
+    playbackWatchdog->start();
+
     // 注意：加载动画在onMediaPlayerError或onBilibiliAudioFileReady中隐藏
     // 因为直接播放可能失败（403错误）
 }
 
 void Widget::onBilibiliAudioDataReady(const QByteArray &data)
 {
+    // 清理之前的音频缓冲区（如果有）
+    if (currentAudioBuffer) {
+        currentAudioBuffer->close();
+        currentAudioBuffer->deleteLater();
+        currentAudioBuffer = nullptr;
+    }
+
     // 使用 QBuffer 播放下载的音频数据
-    QBuffer *audioBuffer = new QBuffer();
-    audioBuffer->setData(data);
-    audioBuffer->open(QIODevice::ReadOnly);
+    currentAudioBuffer = new QBuffer();
+    currentAudioBuffer->setData(data);
+    currentAudioBuffer->open(QIODevice::ReadOnly);
 
     // 设置媒体源为缓冲区
-    mediaPlayer->setSourceDevice(audioBuffer);
+    mediaPlayer->setSourceDevice(currentAudioBuffer);
     mediaPlayer->play();
 
-    // 清理：当播放完成后删除缓冲区
-    connect(mediaPlayer, &QMediaPlayer::playbackStateChanged, this, [this, audioBuffer](QMediaPlayer::PlaybackState state) {
-        if (state == QMediaPlayer::StoppedState) {
-            audioBuffer->deleteLater();
-        }
-    });
+    // 启动看门狗定时器
+    playbackWatchdog->start();
 }
 
 void Widget::onBilibiliAudioFileReady(const QString &filePath)
@@ -1038,17 +1052,21 @@ void Widget::onBilibiliAudioFileReady(const QString &filePath)
     loadingSpinner->stop();
     playPauseButton->show();
 
+    // 清理之前的临时文件（如果有）
+    if (!currentTempAudioFile.isEmpty() && QFile::exists(currentTempAudioFile)) {
+        QFile::remove(currentTempAudioFile);
+        qDebug() << "Removed previous temporary audio file:" << currentTempAudioFile;
+    }
+
+    // 保存当前临时文件路径
+    currentTempAudioFile = filePath;
+
     // 使用临时文件播放
     mediaPlayer->setSource(QUrl::fromLocalFile(filePath));
     mediaPlayer->play();
 
-    // 清理：播放完成后删除临时文件
-    connect(mediaPlayer, &QMediaPlayer::playbackStateChanged, this, [filePath](QMediaPlayer::PlaybackState state) {
-        if (state == QMediaPlayer::StoppedState) {
-            QFile::remove(filePath);
-            qDebug() << "Removed temporary audio file:" << filePath;
-        }
-    });
+    // 启动看门狗定时器
+    playbackWatchdog->start();
 }
 
 void Widget::onBilibiliImageDownloaded(const QByteArray &data)
@@ -1185,8 +1203,16 @@ void Widget::updateState(QMediaPlayer::PlaybackState state)
             loadingSpinner->stop();
             playPauseButton->show();
         }
+
+        // 启动看门狗定时器
+        playbackWatchdog->start();
     } else {
         playPauseButton->setIcon(QIcon(":/icons/play.png"));
+
+        // 停止状态时停止看门狗
+        if (state == QMediaPlayer::StoppedState) {
+            playbackWatchdog->stop();
+        }
     }
 
     // 更新悬浮窗状态
@@ -1200,9 +1226,78 @@ void Widget::setPosition(int position)
 
 // --- 新增的私有和槽函数实现 ---
 
+void Widget::cleanupPreviousPlayback()
+{
+    // 停止播放器
+    if (mediaPlayer->playbackState() != QMediaPlayer::StoppedState) {
+        mediaPlayer->stop();
+    }
+
+    // 清理音频缓冲区
+    if (currentAudioBuffer) {
+        currentAudioBuffer->close();
+        currentAudioBuffer->deleteLater();
+        currentAudioBuffer = nullptr;
+        qDebug() << "Cleaned up audio buffer";
+    }
+
+    // 清理临时音频文件
+    if (!currentTempAudioFile.isEmpty()) {
+        if (QFile::exists(currentTempAudioFile)) {
+            QFile::remove(currentTempAudioFile);
+            qDebug() << "Removed temporary audio file:" << currentTempAudioFile;
+        }
+        currentTempAudioFile.clear();
+    }
+
+    // 重置播放器源
+    mediaPlayer->setSource(QUrl());
+
+    // 重置看门狗计数器
+    stuckCount = 0;
+    lastPosition = 0;
+}
+
+void Widget::checkPlaybackHealth()
+{
+    // 只在播放状态时检查
+    if (mediaPlayer->playbackState() != QMediaPlayer::PlayingState) {
+        return;
+    }
+
+    qint64 currentPosition = mediaPlayer->position();
+
+    // 如果位置没有变化，可能是卡住了
+    if (currentPosition == lastPosition) {
+        stuckCount++;
+        qDebug() << "Playback might be stuck, count:" << stuckCount;
+
+        // 连续3次（15秒）位置不变，认为卡住了
+        if (stuckCount >= 3) {
+            qDebug() << "Playback stuck detected, attempting recovery...";
+
+            // 尝试恢复：暂停后继续播放
+            mediaPlayer->pause();
+            QTimer::singleShot(100, [this]() {
+                mediaPlayer->play();
+            });
+
+            stuckCount = 0;
+        }
+    } else {
+        // 位置有变化，重置计数器
+        stuckCount = 0;
+    }
+
+    lastPosition = currentPosition;
+}
+
 void Widget::playSong(qint64 id)
 {
     if (id <= 0) return;
+
+    // 清理之前的播放资源
+    cleanupPreviousPlayback();
 
     currentPlayingSongId = id; // 更新当前播放的歌曲ID
     currentBvid.clear(); // 清除Bilibili BV号
@@ -1240,6 +1335,9 @@ void Widget::playSong(qint64 id)
 void Widget::playBilibiliVideo(const QString &bvid)
 {
     if (bvid.isEmpty()) return;
+
+    // 清理之前的播放资源
+    cleanupPreviousPlayback();
 
     currentBvid = bvid; // 更新当前播放的BV号
     currentPlayingSongId = -1; // 清除网易云音乐ID
