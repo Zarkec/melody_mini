@@ -41,19 +41,19 @@ public:
 
 signals:
     // 网易云音乐信号
-    void searchFinished(const QJsonDocument &json);
-    void lyricFinished(const QJsonDocument &json);
-    void songDetailFinished(const QJsonDocument &json);
-    void imageDownloaded(const QByteArray &data);
-    void songUrlReady(const QUrl &url);
+    void searchFinished(const QJsonDocument &json, const QString &keywords, int limit, int offset);
+    void lyricFinished(const QJsonDocument &json, qint64 songId);
+    void songDetailFinished(const QJsonDocument &json, qint64 songId);
+    void imageDownloaded(const QByteArray &data, const QUrl &url);
+    void songUrlReady(const QUrl &url, qint64 songId);
 
     // Bilibili信号
-    void bilibiliSearchFinished(const QJsonDocument &json);
-    void bilibiliVideoInfoFinished(const QJsonDocument &json);
-    void bilibiliAudioUrlReady(const QUrl &url);
+    void bilibiliSearchFinished(const QJsonDocument &json, const QString &keywords, int page);
+    void bilibiliVideoInfoFinished(const QJsonDocument &json, const QString &bvid);
+    void bilibiliAudioUrlReady(const QUrl &url, const QString &bvid, qint64 cid);
     void bilibiliAudioDataReady(const QByteArray &data);
     void bilibiliAudioFileReady(const QString &filePath); // 新增：临时文件路径信号
-    void bilibiliImageDownloaded(const QByteArray &data);
+    void bilibiliImageDownloaded(const QByteArray &data, const QUrl &url);
 
     void error(const QString &errorString);
 

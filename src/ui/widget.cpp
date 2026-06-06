@@ -408,6 +408,7 @@ Widget::Widget(QWidget *parent)
     // --- 业务逻辑变量初始化 ---
     currentPage = 1;
     currentPlayingSongId = -1;
+    pendingCoverSource = SearchSource::NetEase;
     currentSearchSource = SearchSource::NetEase; // 默认网易云音乐
 
     // --- 动态背景初始化 ---
@@ -741,7 +742,6 @@ void Widget::onSearchSourceChanged(int index)
     // 清空当前搜索结果
     resultList->clear();
     searchResultSongs.clear();
-    playlistManager->addSongs({}); // 清空播放列表
 
     // 更新placeholder提示
     if (currentSearchSource == SearchSource::NetEase) {
@@ -751,8 +751,16 @@ void Widget::onSearchSourceChanged(int index)
     }
 }
 
-void Widget::onSearchFinished(const QJsonDocument &json)
+void Widget::onSearchFinished(const QJsonDocument &json, const QString &keywords, int limit, int offset)
 {
+    Q_UNUSED(limit)
+    int responsePage = offset / 15 + 1;
+    if (currentSearchSource != SearchSource::NetEase ||
+        keywords != currentSearchKeywords ||
+        responsePage != currentPage) {
+        return;
+    }
+
     searchButton->setEnabled(true);
     searchButton->setToolTip("搜索");
     resultList->clear(); // 清空列表
@@ -792,7 +800,6 @@ void Widget::onSearchFinished(const QJsonDocument &json)
                 song.source = SearchSource::NetEase;
                 searchResultSongs.append(song);
             }
-            playlistManager->addSongs(searchResultSongs);
         }
     }
 
@@ -803,8 +810,14 @@ void Widget::onSearchFinished(const QJsonDocument &json)
     nextPageButton->setEnabled(currentPage < totalPages);
 }
 
-void Widget::onBilibiliSearchFinished(const QJsonDocument &json)
+void Widget::onBilibiliSearchFinished(const QJsonDocument &json, const QString &keywords, int page)
 {
+    if (currentSearchSource != SearchSource::Bilibili ||
+        keywords != currentSearchKeywords ||
+        page != currentPage) {
+        return;
+    }
+
     searchButton->setEnabled(true);
     searchButton->setToolTip("搜索");
     resultList->clear();
@@ -864,8 +877,6 @@ void Widget::onBilibiliSearchFinished(const QJsonDocument &json)
         searchResultSongs.append(song);
     }
 
-    playlistManager->addSongs(searchResultSongs);
-
     // 更新分页控件状态 (Bilibili每页20个结果)
     int totalPages = (totalResults > 0) ? (totalResults + 19) / 20 : 0;
     pageLabel->setText(QString("第 %1 / %2 页").arg(totalPages > 0 ? currentPage : 0).arg(totalPages));
@@ -914,8 +925,12 @@ void Widget::onFloatingExpandClicked()
     trayIcon->hide();
 }
 
-void Widget::onLyricFinished(const QJsonDocument &json)
+void Widget::onLyricFinished(const QJsonDocument &json, qint64 songId)
 {
+    if (songId != currentPlayingSongId) {
+        return;
+    }
+
     lyricData.clear();
     QJsonObject rootObj = json.object();
     if (rootObj.contains("lrc")) {
@@ -924,8 +939,12 @@ void Widget::onLyricFinished(const QJsonDocument &json)
     }
 }
 
-void Widget::onSongDetailFinished(const QJsonDocument &json)
+void Widget::onSongDetailFinished(const QJsonDocument &json, qint64 songId)
 {
+    if (songId != currentPlayingSongId) {
+        return;
+    }
+
     QJsonObject rootObj = json.object();
     if (rootObj.contains("songs")) {
         QJsonArray songsArray = rootObj["songs"].toArray();
@@ -933,14 +952,22 @@ void Widget::onSongDetailFinished(const QJsonDocument &json)
             QJsonObject songObj = songsArray[0].toObject();
             if (songObj.contains("album")) {
                 QString imageUrl = songObj["album"].toObject()["picUrl"].toString() + "?param=800y800";
-                apiManager->downloadImage(QUrl(imageUrl));
+                pendingCoverUrl = QUrl(imageUrl);
+                pendingCoverSource = SearchSource::NetEase;
+                apiManager->downloadImage(pendingCoverUrl);
             }
         }
     }
 }
 
-void Widget::onImageDownloaded(const QByteArray &data)
+void Widget::onImageDownloaded(const QByteArray &data, const QUrl &url)
 {
+    if (currentPlayingSongId == -1 ||
+        pendingCoverSource != SearchSource::NetEase ||
+        url != pendingCoverUrl) {
+        return;
+    }
+
     QPixmap pixmap;
     if (pixmap.loadFromData(data)) {
         originalAlbumArt = pixmap;
@@ -957,14 +984,22 @@ void Widget::onImageDownloaded(const QByteArray &data)
     }
 }
 
-void Widget::onSongUrlReady(const QUrl &url)
+void Widget::onSongUrlReady(const QUrl &url, qint64 songId)
 {
+    if (songId != currentPlayingSongId) {
+        return;
+    }
+
     mediaPlayer->setSource(url);
     mediaPlayer->play();
 }
 
-void Widget::onBilibiliVideoInfoFinished(const QJsonDocument &json)
+void Widget::onBilibiliVideoInfoFinished(const QJsonDocument &json, const QString &requestBvid)
 {
+    if (requestBvid != currentBvid) {
+        return;
+    }
+
     QJsonObject rootObj = json.object();
     if (rootObj.value("code").toInt() != 0) {
         qDebug() << "获取Bilibili视频信息失败:" << rootObj.value("message").toString();
@@ -992,7 +1027,9 @@ void Widget::onBilibiliVideoInfoFinished(const QJsonDocument &json)
             if (!pic.startsWith("http")) {
                 pic = "https:" + pic;
             }
-            apiManager->downloadBilibiliImage(QUrl(pic));
+            pendingCoverUrl = QUrl(pic);
+            pendingCoverSource = SearchSource::Bilibili;
+            apiManager->downloadBilibiliImage(pendingCoverUrl);
         }
 
         // 获取音频URL
@@ -1000,14 +1037,20 @@ void Widget::onBilibiliVideoInfoFinished(const QJsonDocument &json)
     }
 }
 
-void Widget::onBilibiliAudioUrlReady(const QUrl &url)
+void Widget::onBilibiliAudioUrlReady(const QUrl &url, const QString &bvid, qint64 cid)
 {
+    Q_UNUSED(cid)
+    if (bvid != currentBvid) {
+        return;
+    }
+
     // 方案1：先尝试直接播放
     mediaPlayer->setSource(url);
     mediaPlayer->play();
 
     // 保存URL，如果播放失败会用到
     currentBilibiliAudioUrl = url;
+    currentBilibiliAudioBvid = bvid;
 
     // 注意：加载动画在onMediaPlayerError或onBilibiliAudioFileReady中隐藏
     // 因为直接播放可能失败（403错误）
@@ -1051,8 +1094,14 @@ void Widget::onBilibiliAudioFileReady(const QString &filePath)
     });
 }
 
-void Widget::onBilibiliImageDownloaded(const QByteArray &data)
+void Widget::onBilibiliImageDownloaded(const QByteArray &data, const QUrl &url)
 {
+    if (currentBvid.isEmpty() ||
+        pendingCoverSource != SearchSource::Bilibili ||
+        url != pendingCoverUrl) {
+        return;
+    }
+
     QPixmap pixmap;
     if (pixmap.loadFromData(data)) {
         originalAlbumArt = pixmap;
@@ -1088,7 +1137,10 @@ void Widget::onApiError(const QString &errorString)
 void Widget::onMediaPlayerError(QMediaPlayer::Error error, const QString &errorString)
 {
     // 检查是否是访问被拒绝错误（403）
-    if (error == QMediaPlayer::ResourceError && !currentBilibiliAudioUrl.isEmpty()) {
+    if (error == QMediaPlayer::ResourceError &&
+        !currentBilibiliAudioUrl.isEmpty() &&
+        !currentBvid.isEmpty() &&
+        currentBilibiliAudioBvid == currentBvid) {
         qDebug() << "Direct playback failed (likely 403), switching to download mode for:" << currentBilibiliAudioUrl.toString();
 
         // 停止当前播放
@@ -1099,6 +1151,7 @@ void Widget::onMediaPlayerError(QMediaPlayer::Error error, const QString &errorS
 
         // 清空当前URL，避免重复尝试
         currentBilibiliAudioUrl.clear();
+        currentBilibiliAudioBvid.clear();
     } else {
         // 其他错误，显示错误信息并隐藏加载动画
         loadingSpinner->stop();
@@ -1127,6 +1180,7 @@ void Widget::onResultItemDoubleClicked(QListWidgetItem *item)
         mainStackedWidget->setCurrentWidget(playerPage);
     } else {
         // 否则，按正常流程播放新歌曲
+        playlistManager->addSongs(searchResultSongs);
         playlistManager->setCurrentIndex(index);
 
         Song currentSong = playlistManager->getCurrentSong();
@@ -1203,6 +1257,10 @@ void Widget::setPosition(int position)
 void Widget::playSong(qint64 id)
 {
     if (id <= 0) return;
+    pendingCoverUrl = QUrl();
+    pendingCoverSource = SearchSource::NetEase;
+    currentBilibiliAudioUrl.clear();
+    currentBilibiliAudioBvid.clear();
 
     currentPlayingSongId = id; // 更新当前播放的歌曲ID
     currentBvid.clear(); // 清除Bilibili BV号
@@ -1240,6 +1298,10 @@ void Widget::playSong(qint64 id)
 void Widget::playBilibiliVideo(const QString &bvid)
 {
     if (bvid.isEmpty()) return;
+    pendingCoverUrl = QUrl();
+    pendingCoverSource = SearchSource::Bilibili;
+    currentBilibiliAudioUrl.clear();
+    currentBilibiliAudioBvid.clear();
 
     currentBvid = bvid; // 更新当前播放的BV号
     currentPlayingSongId = -1; // 清除网易云音乐ID

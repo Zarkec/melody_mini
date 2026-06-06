@@ -144,19 +144,19 @@ public:
 private slots:
     // 网络相关 - 网易云音乐
     void onSearchButtonClicked();
-    void onSearchFinished(const QJsonDocument &json);
-    void onLyricFinished(const QJsonDocument &json);
-    void onSongDetailFinished(const QJsonDocument &json);
-    void onImageDownloaded(const QByteArray &data);
-    void onSongUrlReady(const QUrl &url);
+    void onSearchFinished(const QJsonDocument &json, const QString &keywords, int limit, int offset);
+    void onLyricFinished(const QJsonDocument &json, qint64 songId);
+    void onSongDetailFinished(const QJsonDocument &json, qint64 songId);
+    void onImageDownloaded(const QByteArray &data, const QUrl &url);
+    void onSongUrlReady(const QUrl &url, qint64 songId);
 
     // 网络相关 - Bilibili
-    void onBilibiliSearchFinished(const QJsonDocument &json);
-    void onBilibiliVideoInfoFinished(const QJsonDocument &json);
-    void onBilibiliAudioUrlReady(const QUrl &url);
+    void onBilibiliSearchFinished(const QJsonDocument &json, const QString &keywords, int page);
+    void onBilibiliVideoInfoFinished(const QJsonDocument &json, const QString &bvid);
+    void onBilibiliAudioUrlReady(const QUrl &url, const QString &bvid, qint64 cid);
     void onBilibiliAudioDataReady(const QByteArray &data);
     void onBilibiliAudioFileReady(const QString &filePath);
-    void onBilibiliImageDownloaded(const QByteArray &data);
+    void onBilibiliImageDownloaded(const QByteArray &data, const QUrl &url);
 
     void onApiError(const QString &errorString);
     void onMediaPlayerError(QMediaPlayer::Error error, const QString &errorString);
@@ -273,6 +273,8 @@ private:
     
     // 歌词数据
     QMap<qint64, QString> lyricData;
+    QUrl pendingCoverUrl;
+    SearchSource pendingCoverSource;
 
     // 搜索与分页
     QString currentSearchKeywords;
@@ -280,6 +282,7 @@ private:
     qint64 currentPlayingSongId;
     QString currentBvid; // 当前播放的Bilibili视频BV号
     QUrl currentBilibiliAudioUrl; // 当前Bilibili音频URL
+    QString currentBilibiliAudioBvid;
     SearchSource currentSearchSource; // 当前搜索源
 
     // 动态背景

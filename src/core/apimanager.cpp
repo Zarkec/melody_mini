@@ -35,6 +35,9 @@ void ApiManager::searchSongs(const QString &keywords, int limit, int offset)
 
     QNetworkRequest request(url);
     QNetworkReply *reply = manager->get(request);
+    reply->setProperty("keywords", keywords);
+    reply->setProperty("limit", limit);
+    reply->setProperty("offset", offset);
     connect(reply, &QNetworkReply::finished, this, [this, reply](){ onSearchReplyFinished(reply); });
 }
 
@@ -50,6 +53,7 @@ void ApiManager::getLyric(qint64 songId)
 
     QNetworkRequest request(url);
     QNetworkReply *reply = manager->get(request);
+    reply->setProperty("songId", songId);
     connect(reply, &QNetworkReply::finished, this, [this, reply](){ onLyricReplyFinished(reply); });
 }
 
@@ -62,6 +66,7 @@ void ApiManager::getSongDetail(qint64 songId)
 
     QNetworkRequest request(url);
     QNetworkReply *reply = manager->get(request);
+    reply->setProperty("songId", songId);
     connect(reply, &QNetworkReply::finished, this, [this, reply](){ onSongDetailReplyFinished(reply); });
 }
 
@@ -69,6 +74,7 @@ void ApiManager::downloadImage(const QUrl &url)
 {
     QNetworkRequest request(url);
     QNetworkReply *reply = manager->get(request);
+    reply->setProperty("url", url);
     connect(reply, &QNetworkReply::finished, this, [this, reply](){ onImageReplyFinished(reply); });
 }
 
@@ -81,6 +87,7 @@ void ApiManager::getSongUrl(qint64 songId)
 
     QNetworkRequest request(url);
     QNetworkReply *reply = manager->get(request);
+    reply->setProperty("songId", songId);
     connect(reply, &QNetworkReply::finished, this, [this, reply](){ onSongUrlReplyFinished(reply); });
 }
 
@@ -89,7 +96,10 @@ void ApiManager::onSearchReplyFinished(QNetworkReply *reply)
     if (reply->error() != QNetworkReply::NoError) {
         emit error(reply->errorString());
     } else {
-        emit searchFinished(QJsonDocument::fromJson(reply->readAll()));
+        emit searchFinished(QJsonDocument::fromJson(reply->readAll()),
+                            reply->property("keywords").toString(),
+                            reply->property("limit").toInt(),
+                            reply->property("offset").toInt());
     }
     reply->deleteLater();
 }
@@ -99,7 +109,8 @@ void ApiManager::onLyricReplyFinished(QNetworkReply *reply)
     if (reply->error() != QNetworkReply::NoError) {
         emit error(reply->errorString());
     } else {
-        emit lyricFinished(QJsonDocument::fromJson(reply->readAll()));
+        emit lyricFinished(QJsonDocument::fromJson(reply->readAll()),
+                           reply->property("songId").toLongLong());
     }
     reply->deleteLater();
 }
@@ -109,7 +120,8 @@ void ApiManager::onSongDetailReplyFinished(QNetworkReply *reply)
     if (reply->error() != QNetworkReply::NoError) {
         emit error(reply->errorString());
     } else {
-        emit songDetailFinished(QJsonDocument::fromJson(reply->readAll()));
+        emit songDetailFinished(QJsonDocument::fromJson(reply->readAll()),
+                                reply->property("songId").toLongLong());
     }
     reply->deleteLater();
 }
@@ -119,7 +131,7 @@ void ApiManager::onImageReplyFinished(QNetworkReply *reply)
     if (reply->error() != QNetworkReply::NoError) {
         emit error(reply->errorString());
     } else {
-        emit imageDownloaded(reply->readAll());
+        emit imageDownloaded(reply->readAll(), reply->property("url").toUrl());
     }
     reply->deleteLater();
 }
@@ -132,7 +144,7 @@ void ApiManager::onSongUrlReplyFinished(QNetworkReply *reply)
         QByteArray responseData = reply->readAll();
         QString onlineUrl = QString::fromUtf8(responseData);
         if (!onlineUrl.isEmpty()) {
-            emit songUrlReady(QUrl(onlineUrl));
+            emit songUrlReady(QUrl(onlineUrl), reply->property("songId").toLongLong());
         } else {
             emit error("无法解析歌曲链接");
         }
@@ -158,6 +170,8 @@ void ApiManager::searchBilibiliVideos(const QString &keywords, int page)
     setBilibiliHeaders(request);
 
     QNetworkReply *reply = manager->get(request);
+    reply->setProperty("keywords", keywords);
+    reply->setProperty("page", page);
     connect(reply, &QNetworkReply::finished, this, [this, reply](){ onBilibiliSearchReplyFinished(reply); });
 }
 
@@ -169,6 +183,7 @@ void ApiManager::getBilibiliVideoInfo(const QString &bvid)
     setBilibiliHeaders(request);
 
     QNetworkReply *reply = manager->get(request);
+    reply->setProperty("bvid", bvid);
     connect(reply, &QNetworkReply::finished, this, [this, reply](){ onBilibiliVideoInfoReplyFinished(reply); });
 }
 
@@ -180,6 +195,8 @@ void ApiManager::getBilibiliAudioUrl(const QString &bvid, qint64 cid)
     setBilibiliHeaders(request);
 
     QNetworkReply *reply = manager->get(request);
+    reply->setProperty("bvid", bvid);
+    reply->setProperty("cid", cid);
     connect(reply, &QNetworkReply::finished, this, [this, reply](){ onBilibiliAudioUrlReplyFinished(reply); });
 }
 
@@ -189,6 +206,7 @@ void ApiManager::downloadBilibiliImage(const QUrl &url)
     setBilibiliHeaders(request);
 
     QNetworkReply *reply = manager->get(request);
+    reply->setProperty("url", url);
     connect(reply, &QNetworkReply::finished, this, [this, reply](){ onBilibiliImageReplyFinished(reply); });
 }
 
@@ -215,7 +233,9 @@ void ApiManager::onBilibiliSearchReplyFinished(QNetworkReply *reply)
         QByteArray data = reply->readAll();
         qDebug() << "Bilibili search response size:" << data.size();
         qDebug() << "Bilibili search response preview:" << data.left(500);
-        emit bilibiliSearchFinished(QJsonDocument::fromJson(data));
+        emit bilibiliSearchFinished(QJsonDocument::fromJson(data),
+                                    reply->property("keywords").toString(),
+                                    reply->property("page").toInt());
     }
     reply->deleteLater();
 }
@@ -225,7 +245,8 @@ void ApiManager::onBilibiliVideoInfoReplyFinished(QNetworkReply *reply)
     if (reply->error() != QNetworkReply::NoError) {
         emit error("获取Bilibili视频信息失败: " + reply->errorString());
     } else {
-        emit bilibiliVideoInfoFinished(QJsonDocument::fromJson(reply->readAll()));
+        emit bilibiliVideoInfoFinished(QJsonDocument::fromJson(reply->readAll()),
+                                       reply->property("bvid").toString());
     }
     reply->deleteLater();
 }
@@ -284,10 +305,14 @@ void ApiManager::onBilibiliAudioUrlReplyFinished(QNetworkReply *reply)
 
         if (!audioUrl.isEmpty()) {
             qDebug() << "Bilibili audio URL ready:" << audioUrl.toString().left(100) << "...";
-            emit bilibiliAudioUrlReady(audioUrl);
+            emit bilibiliAudioUrlReady(audioUrl,
+                                       reply->property("bvid").toString(),
+                                       reply->property("cid").toLongLong());
         } else if (!backupUrl.isEmpty()) {
             qDebug() << "Using backup Bilibili audio URL";
-            emit bilibiliAudioUrlReady(QUrl(backupUrl));
+            emit bilibiliAudioUrlReady(QUrl(backupUrl),
+                                       reply->property("bvid").toString(),
+                                       reply->property("cid").toLongLong());
         } else {
             emit error("无法获取Bilibili音频地址");
         }
@@ -300,7 +325,7 @@ void ApiManager::onBilibiliImageReplyFinished(QNetworkReply *reply)
     if (reply->error() != QNetworkReply::NoError) {
         emit error("下载Bilibili图片失败: " + reply->errorString());
     } else {
-        emit bilibiliImageDownloaded(reply->readAll());
+        emit bilibiliImageDownloaded(reply->readAll(), reply->property("url").toUrl());
     }
     reply->deleteLater();
 }
