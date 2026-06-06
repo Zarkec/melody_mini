@@ -215,6 +215,11 @@ private:
     void setPlaybackLoading(bool loading);
     void updatePlaybackControls();
     void cleanupTemporaryAudio();
+    void showStatusMessage(const QString &message, bool isError = false);
+    void enterTrayMode(bool showMessage);
+    void restoreMainWindow();
+    void refreshAudioDeviceList();
+    bool applyAudioDeviceById(const QByteArray &deviceId);
 
     // 动态背景
     QColor extractDominantColor(const QPixmap &pixmap);
@@ -230,6 +235,7 @@ private:
     QPushButton *searchButton;
     QListWidget *resultList;
     QComboBox *searchSourceCombo; // 搜索源选择
+    QLabel *statusLabel;
     QPushButton *prevPageButton;
     QPushButton *nextPageButton;
     QLabel *pageLabel;
@@ -242,6 +248,7 @@ private:
     QLabel *timeLabel;
     QSlider *volumeSlider;
     QPushButton *volumeButton; // 新增音量按钮
+    QComboBox *audioDeviceCombo;
     QMenu *volumeMenu;         // 新增音量菜单
     QWidgetAction *volumeAction; // 用于将Slider放入Menu
     QPushButton *backButton; // 新增返回按钮
@@ -271,6 +278,8 @@ private:
     QMediaPlayer *mediaPlayer;
     QAudioOutput *audioOutput;
     QMediaDevices *mediaDevices;
+    bool userSelectedAudioDevice;
+    QByteArray selectedAudioDeviceId;
     qint64 currentDuration;
 
     // API管理器
@@ -308,5 +317,6 @@ private:
     QMenu *trayIconMenu;
     QAction *showAction;
     QAction *quitAction;
+    bool isQuitting;
 };
 #endif // WIDGET_H

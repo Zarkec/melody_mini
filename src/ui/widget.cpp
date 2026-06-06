@@ -13,7 +13,6 @@
 #include <QAudioOutput>
 #include <QAudioDevice>
 #include <QMediaDevices>
-#include <QMessageBox>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
@@ -37,6 +36,7 @@
 #include <QGraphicsBlurEffect>
 #include <QGraphicsScene>
 #include <QGraphicsPixmapItem>
+#include <QSignalBlocker>
 
 // --- FloatingIsland 实现 ---
 FloatingIsland::FloatingIsland(QWidget *parent)
@@ -131,6 +131,8 @@ void FloatingIsland::setSongInfo(const QString &name, const QString &artist, con
         painter.end();
 
         coverLabel->setPixmap(roundedCover);
+    } else {
+        coverLabel->clear();
     }
     update();
 }
@@ -180,6 +182,9 @@ void FloatingIsland::showEvent(QShowEvent *event)
 void FloatingIsland::moveEvent(QMoveEvent *event)
 {
     Q_UNUSED(event);
+    if (isDragging) {
+        return;
+    }
     updateBackground();
 }
 
@@ -238,6 +243,7 @@ void FloatingIsland::mouseReleaseEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton) {
         isDragging = false;
+        updateBackground();
     }
 }
 
@@ -412,6 +418,8 @@ Widget::Widget(QWidget *parent)
     pendingCoverSource = SearchSource::NetEase;
     playbackLoading = false;
     currentAudioBuffer = nullptr;
+    isQuitting = false;
+    userSelectedAudioDevice = false;
     currentSearchSource = SearchSource::NetEase; // 默认网易云音乐
 
     // --- 动态背景初始化 ---
@@ -451,6 +459,9 @@ Widget::Widget(QWidget *parent)
     backButton->setFixedSize(28, 28);
     backButton->setVisible(false); // 默认隐藏
     resultList = new QListWidget;
+    statusLabel = new QLabel;
+    statusLabel->setWordWrap(true);
+    statusLabel->setVisible(false);
 
     // 搜索源选择下拉框
     searchSourceCombo = new QComboBox;
@@ -497,6 +508,8 @@ Widget::Widget(QWidget *parent)
     volumeButton->setIcon(QIcon(":/icons/volume-high.png"));
     volumeButton->setIconSize(QSize(20, 20));
     volumeButton->setFixedSize(28, 28);
+    audioDeviceCombo = new QComboBox;
+    audioDeviceCombo->setMinimumWidth(180);
 
     // --- 缩小按钮 ---
     minimizeButton = new QPushButton;
@@ -513,7 +526,12 @@ Widget::Widget(QWidget *parent)
 
     volumeMenu = new QMenu(this);
     volumeAction = new QWidgetAction(this);
-    volumeAction->setDefaultWidget(volumeSlider);
+    QWidget *volumePanel = new QWidget;
+    QVBoxLayout *volumePanelLayout = new QVBoxLayout(volumePanel);
+    volumePanelLayout->setContentsMargins(6, 6, 6, 6);
+    volumePanelLayout->addWidget(audioDeviceCombo);
+    volumePanelLayout->addWidget(volumeSlider, 0, Qt::AlignHCenter);
+    volumeAction->setDefaultWidget(volumePanel);
     volumeMenu->addAction(volumeAction);
 
     // 播放详情页
@@ -600,6 +618,7 @@ Widget::Widget(QWidget *parent)
 
     mainLayout = new QVBoxLayout(this);
     mainLayout->addLayout(topLayout);
+    mainLayout->addWidget(statusLabel);
     mainLayout->addWidget(mainStackedWidget);
     mainLayout->addWidget(paginationWidget); // 添加分页控件容器
     mainLayout->addLayout(bottomContainerLayout);
@@ -624,6 +643,7 @@ Widget::Widget(QWidget *parent)
     if (!defaultDevice.isNull()) {
         audioOutput->setDevice(defaultDevice);
     }
+    refreshAudioDeviceList();
     
     apiManager = new ApiManager(this);
 
@@ -662,6 +682,14 @@ Widget::Widget(QWidget *parent)
         audioOutput->setVolume(value / 100.0);
         updateVolumeIcon(value);
     });
+    connect(audioDeviceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (index < 0) return;
+        QByteArray deviceId = audioDeviceCombo->itemData(index).toByteArray();
+        if (applyAudioDeviceById(deviceId)) {
+            userSelectedAudioDevice = true;
+            selectedAudioDeviceId = deviceId;
+        }
+    });
     connect(mediaPlayer, &QMediaPlayer::positionChanged, this, &Widget::updatePosition);
     connect(mediaPlayer, &QMediaPlayer::durationChanged, this, &Widget::updateDuration);
     connect(mediaPlayer, &QMediaPlayer::playbackStateChanged, this, &Widget::updateState);
@@ -671,11 +699,18 @@ Widget::Widget(QWidget *parent)
 
     // 监听音频输出设备变化
     connect(mediaDevices, &QMediaDevices::audioOutputsChanged, this, [this]() {
-        QAudioDevice newDefault = QMediaDevices::defaultAudioOutput();
-        if (!newDefault.isNull() && audioOutput->device() != newDefault) {
-            audioOutput->setDevice(newDefault);
-            qDebug() << "音频设备已切换到:" << newDefault.description();
+        if (userSelectedAudioDevice && applyAudioDeviceById(selectedAudioDeviceId)) {
+            refreshAudioDeviceList();
+            return;
         }
+
+        userSelectedAudioDevice = false;
+        selectedAudioDeviceId.clear();
+        QAudioDevice newDefault = QMediaDevices::defaultAudioOutput();
+        if (!newDefault.isNull()) {
+            audioOutput->setDevice(newDefault);
+        }
+        refreshAudioDeviceList();
     });
 
     // 新增：连接上一曲/下一曲/播放模式按钮
@@ -689,10 +724,15 @@ Widget::Widget(QWidget *parent)
     trayIcon->setToolTip("Melody");
 
     showAction = new QAction("显示窗口", this);
-    connect(showAction, &QAction::triggered, this, &QWidget::showNormal);
+    connect(showAction, &QAction::triggered, this, &Widget::restoreMainWindow);
 
     quitAction = new QAction("退出", this);
-    connect(quitAction, &QAction::triggered, qApp, &QCoreApplication::quit);
+    connect(quitAction, &QAction::triggered, this, [this]() {
+        isQuitting = true;
+        floatingIsland->hide();
+        trayIcon->hide();
+        qApp->quit();
+    });
 
     trayIconMenu = new QMenu(this);
     trayIconMenu->addAction(showAction);
@@ -734,11 +774,13 @@ void Widget::onSearchButtonClicked()
         pageLabel->setText("第 0 / 0 页");
         prevPageButton->setEnabled(false);
         nextPageButton->setEnabled(false);
+        showStatusMessage("请输入搜索关键词。");
         return;
     }
     if (!currentSearchKeywords.isEmpty()) {
         currentPage = 1; // 每次新搜索都重置为第一页
         mainStackedWidget->setCurrentWidget(resultList);
+        showStatusMessage(QString());
         setSearchLoading(true);
 
         // 根据搜索源调用不同的API
@@ -827,6 +869,19 @@ void Widget::cleanupTemporaryAudio()
     }
 }
 
+void Widget::showStatusMessage(const QString &message, bool isError)
+{
+    if (message.isEmpty()) {
+        statusLabel->clear();
+        statusLabel->setVisible(false);
+        return;
+    }
+
+    statusLabel->setText(message);
+    statusLabel->setStyleSheet(isError ? "color: #ffb4a8; background: transparent;" : "background: transparent;");
+    statusLabel->setVisible(true);
+}
+
 void Widget::onSearchFinished(const QJsonDocument &json, const QString &keywords, int limit, int offset)
 {
     Q_UNUSED(limit)
@@ -852,7 +907,7 @@ void Widget::onSearchFinished(const QJsonDocument &json, const QString &keywords
         if (resultObj.contains("songs")) {
             QJsonArray songsArray = resultObj["songs"].toArray();
             if (songsArray.isEmpty() && currentPage == 1) {
-                QMessageBox::information(this, "无结果", "未找到相关歌曲。");
+                showStatusMessage("未找到相关歌曲。");
             }
             for (const QJsonValue &value : songsArray) {
                 QJsonObject songObj = value.toObject();
@@ -906,7 +961,7 @@ void Widget::onBilibiliSearchFinished(const QJsonDocument &json, const QString &
 
     if (rootObj.value("code").toInt() != 0) {
         QString message = rootObj.value("message").toString();
-        QMessageBox::warning(this, "搜索失败", message.isEmpty() ? "Bilibili搜索失败" : message);
+        showStatusMessage(message.isEmpty() ? "Bilibili搜索失败。" : message, true);
         return;
     }
 
@@ -920,7 +975,7 @@ void Widget::onBilibiliSearchFinished(const QJsonDocument &json, const QString &
     qDebug() << "Bilibili search videos count:" << videosArray.size();
 
     if (videosArray.isEmpty() && currentPage == 1) {
-        QMessageBox::information(this, "无结果", "未找到相关视频。");
+        showStatusMessage("未找到相关视频。");
     }
 
     for (const QJsonValue &value : videosArray) {
@@ -995,10 +1050,7 @@ void Widget::onMinimizeButtonClicked()
 
 void Widget::onFloatingExpandClicked()
 {
-    floatingIsland->hide();
-    this->showNormal();
-    this->activateWindow();
-    trayIcon->hide();
+    restoreMainWindow();
 }
 
 void Widget::onLyricFinished(const QJsonDocument &json, qint64 songId)
@@ -1079,6 +1131,10 @@ void Widget::onBilibiliVideoInfoFinished(const QJsonDocument &json, const QStrin
     QJsonObject rootObj = json.object();
     if (rootObj.value("code").toInt() != 0) {
         qDebug() << "获取Bilibili视频信息失败:" << rootObj.value("message").toString();
+        showStatusMessage(rootObj.value("message").toString().isEmpty()
+                              ? "获取Bilibili视频信息失败。"
+                              : rootObj.value("message").toString(),
+                          true);
         setPlaybackLoading(false);
         return;
     }
@@ -1214,7 +1270,7 @@ void Widget::onApiError(const QString &errorString)
 
     setSearchLoading(false);
     setPlaybackLoading(false);
-    QMessageBox::critical(this, "网络错误", errorString);
+    showStatusMessage(errorString, true);
 }
 
 void Widget::onMediaPlayerError(QMediaPlayer::Error error, const QString &errorString)
@@ -1240,6 +1296,7 @@ void Widget::onMediaPlayerError(QMediaPlayer::Error error, const QString &errorS
         loadingSpinner->stop();
         playPauseButton->show();
         qDebug() << "Media player error:" << error << errorString;
+        showStatusMessage(errorString.isEmpty() ? "播放失败，请稍后重试。" : errorString, true);
     }
 }
 
@@ -1499,6 +1556,44 @@ void Widget::updateVolumeIcon(int volume)
         volumeButton->setIcon(QIcon(":/icons/volume-medium.png"));
     } else {
         volumeButton->setIcon(QIcon(":/icons/volume-high.png"));
+    }
+}
+
+bool Widget::applyAudioDeviceById(const QByteArray &deviceId)
+{
+    const auto devices = QMediaDevices::audioOutputs();
+    for (const QAudioDevice &device : devices) {
+        if (device.id() == deviceId) {
+            audioOutput->setDevice(device);
+            return true;
+        }
+    }
+    return false;
+}
+
+void Widget::refreshAudioDeviceList()
+{
+    QSignalBlocker blocker(audioDeviceCombo);
+    audioDeviceCombo->clear();
+
+    const auto devices = QMediaDevices::audioOutputs();
+    QByteArray activeId = userSelectedAudioDevice ? selectedAudioDeviceId : audioOutput->device().id();
+    int activeIndex = -1;
+
+    for (int i = 0; i < devices.size(); ++i) {
+        const QAudioDevice &device = devices.at(i);
+        audioDeviceCombo->addItem(device.description(), device.id());
+        if (device.id() == activeId) {
+            activeIndex = i;
+        }
+    }
+
+    if (activeIndex < 0 && !devices.isEmpty()) {
+        activeIndex = 0;
+    }
+    audioDeviceCombo->setEnabled(!devices.isEmpty());
+    if (activeIndex >= 0) {
+        audioDeviceCombo->setCurrentIndex(activeIndex);
     }
 }
 
@@ -1964,26 +2059,40 @@ void Widget::updateBackgroundColor(const QColor &newColor)
     backgroundAnimation->start();
 }
 
+void Widget::enterTrayMode(bool showMessage)
+{
+    this->hide();
+    floatingIsland->hide();
+    trayIcon->show();
+    if (showMessage) {
+        trayIcon->showMessage("Melody", "播放器已最小化到托盘");
+    }
+}
+
+void Widget::restoreMainWindow()
+{
+    floatingIsland->hide();
+    this->showNormal();
+    this->activateWindow();
+    trayIcon->hide();
+}
+
 void Widget::closeEvent(QCloseEvent *event)
 {
-    // 忽略默认的关闭事件，而是隐藏窗口并显示托盘图标
-    if (this->isVisible()) {
-        event->ignore();
-        this->hide();
-        trayIcon->show();
-        trayIcon->showMessage("Melody", "播放器已最小化到托盘");
-    } else {
+    if (isQuitting) {
         event->accept();
+        return;
     }
+
+    event->ignore();
+    enterTrayMode(true);
 }
 
 void Widget::onTrayIconActivated(QSystemTrayIcon::ActivationReason reason)
 {
     // 双击托盘图标时显示窗口
     if (reason == QSystemTrayIcon::DoubleClick) {
-        this->showNormal();
-        this->activateWindow();
-        trayIcon->hide();
+        restoreMainWindow();
     }
 }
 
