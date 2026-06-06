@@ -81,6 +81,7 @@ class QMenu;
 class QWidgetAction;
 class QAction;
 class QComboBox;
+class QBuffer;
 
 // 悬浮灵动岛窗口
 class FloatingIsland : public QWidget
@@ -210,6 +211,10 @@ private:
     void playSong(qint64 id); // 播放网易云音乐歌曲
     void playBilibiliVideo(const QString &bvid); // 播放Bilibili视频
     void parseLyrics(const QString &lyricText);
+    void setSearchLoading(bool loading);
+    void setPlaybackLoading(bool loading);
+    void updatePlaybackControls();
+    void cleanupTemporaryAudio();
 
     // 动态背景
     QColor extractDominantColor(const QPixmap &pixmap);
@@ -257,6 +262,10 @@ private:
 
     // 加载动画
     LoadingSpinner *loadingSpinner;
+    bool playbackLoading;
+    QString currentTempAudioFilePath;
+    QBuffer *currentAudioBuffer;
+    QMetaObject::Connection tempAudioCleanupConnection;
 
     // 媒体播放器
     QMediaPlayer *mediaPlayer;
@@ -279,6 +288,7 @@ private:
     // 搜索与分页
     QString currentSearchKeywords;
     int currentPage;
+    int currentTotalPages;
     qint64 currentPlayingSongId;
     QString currentBvid; // 当前播放的Bilibili视频BV号
     QUrl currentBilibiliAudioUrl; // 当前Bilibili音频URL

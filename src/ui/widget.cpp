@@ -407,8 +407,11 @@ Widget::Widget(QWidget *parent)
 
     // --- 业务逻辑变量初始化 ---
     currentPage = 1;
+    currentTotalPages = 0;
     currentPlayingSongId = -1;
     pendingCoverSource = SearchSource::NetEase;
+    playbackLoading = false;
+    currentAudioBuffer = nullptr;
     currentSearchSource = SearchSource::NetEase; // 默认网易云音乐
 
     // --- 动态背景初始化 ---
@@ -709,10 +712,12 @@ Widget::Widget(QWidget *parent)
     connect(floatingIsland, &FloatingIsland::nextClicked, this, &Widget::playNextSong);
     connect(floatingIsland, &FloatingIsland::expandClicked, this, &Widget::onFloatingExpandClicked);
     connect(minimizeButton, &QPushButton::clicked, this, &Widget::onMinimizeButtonClicked);
+    updatePlaybackControls();
 }
 
 Widget::~Widget()
 {
+    cleanupTemporaryAudio();
     if (floatingIsland) {
         delete floatingIsland;
     }
@@ -720,12 +725,21 @@ Widget::~Widget()
 
 void Widget::onSearchButtonClicked()
 {
-    currentSearchKeywords = searchInput->text();
+    currentSearchKeywords = searchInput->text().trimmed();
+    if (currentSearchKeywords.isEmpty()) {
+        resultList->clear();
+        searchResultSongs.clear();
+        currentPage = 1;
+        currentTotalPages = 0;
+        pageLabel->setText("第 0 / 0 页");
+        prevPageButton->setEnabled(false);
+        nextPageButton->setEnabled(false);
+        return;
+    }
     if (!currentSearchKeywords.isEmpty()) {
         currentPage = 1; // 每次新搜索都重置为第一页
         mainStackedWidget->setCurrentWidget(resultList);
-        searchButton->setEnabled(false);
-        searchButton->setToolTip("搜索中...");
+        setSearchLoading(true);
 
         // 根据搜索源调用不同的API
         if (currentSearchSource == SearchSource::NetEase) {
@@ -742,12 +756,74 @@ void Widget::onSearchSourceChanged(int index)
     // 清空当前搜索结果
     resultList->clear();
     searchResultSongs.clear();
+    currentPage = 1;
+    currentTotalPages = 0;
+    pageLabel->setText("第 0 / 0 页");
+    prevPageButton->setEnabled(false);
+    nextPageButton->setEnabled(false);
 
     // 更新placeholder提示
     if (currentSearchSource == SearchSource::NetEase) {
         searchInput->setPlaceholderText("输入歌名或歌手...");
     } else {
         searchInput->setPlaceholderText("输入Bilibili视频关键词...");
+    }
+}
+
+void Widget::setSearchLoading(bool loading)
+{
+    searchButton->setEnabled(!loading);
+    searchButton->setToolTip(loading ? "加载中..." : "搜索");
+    prevPageButton->setEnabled(!loading && currentPage > 1);
+    if (loading) {
+        nextPageButton->setEnabled(false);
+    }
+}
+
+void Widget::setPlaybackLoading(bool loading)
+{
+    playbackLoading = loading;
+    prevButton->setEnabled(!loading);
+    nextButton->setEnabled(!loading);
+    playPauseButton->setEnabled(!loading);
+
+    if (loading) {
+        playPauseButton->hide();
+        loadingSpinner->start();
+        loadingSpinner->show();
+    } else {
+        loadingSpinner->stop();
+        playPauseButton->show();
+        updatePlaybackControls();
+    }
+}
+
+void Widget::updatePlaybackControls()
+{
+    bool hasCurrentMedia = currentPlayingSongId != -1 || !currentBvid.isEmpty() || mediaPlayer->source().isValid();
+    bool hasQueue = !playlistManager->isEmpty();
+
+    playPauseButton->setEnabled(!playbackLoading && hasCurrentMedia);
+    prevButton->setEnabled(!playbackLoading && hasQueue);
+    nextButton->setEnabled(!playbackLoading && hasQueue);
+    progressSlider->setEnabled(hasCurrentMedia && currentDuration > 0);
+}
+
+void Widget::cleanupTemporaryAudio()
+{
+    if (tempAudioCleanupConnection) {
+        disconnect(tempAudioCleanupConnection);
+        tempAudioCleanupConnection = QMetaObject::Connection();
+    }
+
+    if (currentAudioBuffer) {
+        currentAudioBuffer->deleteLater();
+        currentAudioBuffer = nullptr;
+    }
+
+    if (!currentTempAudioFilePath.isEmpty()) {
+        QFile::remove(currentTempAudioFilePath);
+        currentTempAudioFilePath.clear();
     }
 }
 
@@ -761,8 +837,7 @@ void Widget::onSearchFinished(const QJsonDocument &json, const QString &keywords
         return;
     }
 
-    searchButton->setEnabled(true);
-    searchButton->setToolTip("搜索");
+    setSearchLoading(false);
     resultList->clear(); // 清空列表
 
     searchResultSongs.clear(); // 清空旧的歌曲数据
@@ -805,6 +880,7 @@ void Widget::onSearchFinished(const QJsonDocument &json, const QString &keywords
 
     // 更新分页控件状态
     int totalPages = (totalSongCount > 0) ? (totalSongCount + 14) / 15 : 0;
+    currentTotalPages = totalPages;
     pageLabel->setText(QString("第 %1 / %2 页").arg(totalPages > 0 ? currentPage : 0).arg(totalPages));
     prevPageButton->setEnabled(currentPage > 1);
     nextPageButton->setEnabled(currentPage < totalPages);
@@ -818,8 +894,7 @@ void Widget::onBilibiliSearchFinished(const QJsonDocument &json, const QString &
         return;
     }
 
-    searchButton->setEnabled(true);
-    searchButton->setToolTip("搜索");
+    setSearchLoading(false);
     resultList->clear();
     searchResultSongs.clear();
 
@@ -879,6 +954,7 @@ void Widget::onBilibiliSearchFinished(const QJsonDocument &json, const QString &
 
     // 更新分页控件状态 (Bilibili每页20个结果)
     int totalPages = (totalResults > 0) ? (totalResults + 19) / 20 : 0;
+    currentTotalPages = totalPages;
     pageLabel->setText(QString("第 %1 / %2 页").arg(totalPages > 0 ? currentPage : 0).arg(totalPages));
     prevPageButton->setEnabled(currentPage > 1);
     nextPageButton->setEnabled(currentPage < totalPages);
@@ -1003,6 +1079,7 @@ void Widget::onBilibiliVideoInfoFinished(const QJsonDocument &json, const QStrin
     QJsonObject rootObj = json.object();
     if (rootObj.value("code").toInt() != 0) {
         qDebug() << "获取Bilibili视频信息失败:" << rootObj.value("message").toString();
+        setPlaybackLoading(false);
         return;
     }
 
@@ -1058,38 +1135,44 @@ void Widget::onBilibiliAudioUrlReady(const QUrl &url, const QString &bvid, qint6
 
 void Widget::onBilibiliAudioDataReady(const QByteArray &data)
 {
+    cleanupTemporaryAudio();
+
     // 使用 QBuffer 播放下载的音频数据
-    QBuffer *audioBuffer = new QBuffer();
-    audioBuffer->setData(data);
-    audioBuffer->open(QIODevice::ReadOnly);
+    currentAudioBuffer = new QBuffer(this);
+    currentAudioBuffer->setData(data);
+    currentAudioBuffer->open(QIODevice::ReadOnly);
 
     // 设置媒体源为缓冲区
-    mediaPlayer->setSourceDevice(audioBuffer);
+    mediaPlayer->setSourceDevice(currentAudioBuffer);
     mediaPlayer->play();
 
     // 清理：当播放完成后删除缓冲区
-    connect(mediaPlayer, &QMediaPlayer::playbackStateChanged, this, [this, audioBuffer](QMediaPlayer::PlaybackState state) {
+    tempAudioCleanupConnection = connect(mediaPlayer, &QMediaPlayer::playbackStateChanged, this, [this](QMediaPlayer::PlaybackState state) {
         if (state == QMediaPlayer::StoppedState) {
-            audioBuffer->deleteLater();
+            cleanupTemporaryAudio();
         }
     });
 }
 
 void Widget::onBilibiliAudioFileReady(const QString &filePath)
 {
+    cleanupTemporaryAudio();
+
     // 隐藏加载动画，显示播放按钮
-    loadingSpinner->stop();
-    playPauseButton->show();
+    setPlaybackLoading(false);
 
     // 使用临时文件播放
+    currentTempAudioFilePath = filePath;
     mediaPlayer->setSource(QUrl::fromLocalFile(filePath));
     mediaPlayer->play();
 
     // 清理：播放完成后删除临时文件
-    connect(mediaPlayer, &QMediaPlayer::playbackStateChanged, this, [filePath](QMediaPlayer::PlaybackState state) {
+    tempAudioCleanupConnection = connect(mediaPlayer, &QMediaPlayer::playbackStateChanged, this, [this, filePath](QMediaPlayer::PlaybackState state) {
         if (state == QMediaPlayer::StoppedState) {
-            QFile::remove(filePath);
-            qDebug() << "Removed temporary audio file:" << filePath;
+            if (currentTempAudioFilePath == filePath) {
+                cleanupTemporaryAudio();
+                qDebug() << "Removed temporary audio file:" << filePath;
+            }
         }
     });
 }
@@ -1129,8 +1212,8 @@ void Widget::onApiError(const QString &errorString)
         return; // 尝试备用链接，不显示错误弹窗
     }
 
-    searchButton->setEnabled(true);
-    searchButton->setToolTip("搜索");
+    setSearchLoading(false);
+    setPlaybackLoading(false);
     QMessageBox::critical(this, "网络错误", errorString);
 }
 
@@ -1182,6 +1265,7 @@ void Widget::onResultItemDoubleClicked(QListWidgetItem *item)
         // 否则，按正常流程播放新歌曲
         playlistManager->addSongs(searchResultSongs);
         playlistManager->setCurrentIndex(index);
+        updatePlaybackControls();
 
         Song currentSong = playlistManager->getCurrentSong();
         if (currentSong.source == SearchSource::Bilibili) {
@@ -1194,6 +1278,9 @@ void Widget::onResultItemDoubleClicked(QListWidgetItem *item)
 
 void Widget::onPlayPauseButtonClicked()
 {
+    if (playbackLoading) return;
+    if (currentPlayingSongId == -1 && currentBvid.isEmpty() && !mediaPlayer->source().isValid()) return;
+
     if (mediaPlayer->playbackState() == QMediaPlayer::PlayingState) {
         mediaPlayer->pause();
     } else {
@@ -1228,6 +1315,7 @@ void Widget::updateDuration(qint64 duration)
 {
     currentDuration = duration;
     progressSlider->setRange(0, duration);
+    updatePlaybackControls();
 }
 
 void Widget::updateState(QMediaPlayer::PlaybackState state)
@@ -1235,9 +1323,8 @@ void Widget::updateState(QMediaPlayer::PlaybackState state)
     if (state == QMediaPlayer::PlayingState) {
         playPauseButton->setIcon(QIcon(":/icons/pause.png"));
 
-        if (loadingSpinner->isVisible()) {
-            loadingSpinner->stop();
-            playPauseButton->show();
+        if (playbackLoading) {
+            setPlaybackLoading(false);
         }
     } else {
         playPauseButton->setIcon(QIcon(":/icons/play.png"));
@@ -1249,6 +1336,7 @@ void Widget::updateState(QMediaPlayer::PlaybackState state)
 
 void Widget::setPosition(int position)
 {
+    if (currentDuration <= 0) return;
     mediaPlayer->setPosition(position);
 }
 
@@ -1257,6 +1345,11 @@ void Widget::setPosition(int position)
 void Widget::playSong(qint64 id)
 {
     if (id <= 0) return;
+    setPlaybackLoading(true);
+    if (!currentTempAudioFilePath.isEmpty() || currentAudioBuffer) {
+        mediaPlayer->stop();
+    }
+    cleanupTemporaryAudio();
     pendingCoverUrl = QUrl();
     pendingCoverSource = SearchSource::NetEase;
     currentBilibiliAudioUrl.clear();
@@ -1298,6 +1391,11 @@ void Widget::playSong(qint64 id)
 void Widget::playBilibiliVideo(const QString &bvid)
 {
     if (bvid.isEmpty()) return;
+    setPlaybackLoading(true);
+    if (!currentTempAudioFilePath.isEmpty() || currentAudioBuffer) {
+        mediaPlayer->stop();
+    }
+    cleanupTemporaryAudio();
     pendingCoverUrl = QUrl();
     pendingCoverSource = SearchSource::Bilibili;
     currentBilibiliAudioUrl.clear();
@@ -1324,11 +1422,6 @@ void Widget::playBilibiliVideo(const QString &bvid)
     lyricLabel->setText("Bilibili视频 - 无歌词");
     setWidgetStyle(QColor(51, 51, 51));
 
-    // 显示加载动画（隐藏播放按钮，显示加载标签）
-    playPauseButton->hide();
-    loadingSpinner->start(); // 启动加载动画
-    loadingSpinner->show();
-
     // 获取视频信息（包含cid和封面）
     apiManager->getBilibiliVideoInfo(bvid);
 
@@ -1343,11 +1436,13 @@ void Widget::onMediaStatusChanged(QMediaPlayer::MediaStatus status)
         currentPlayingSongId = -1; // 播放结束，重置ID
         currentBvid.clear(); // 清除BV号
         playNextSong();
+        updatePlaybackControls();
     }
 }
 
 void Widget::playNextSong()
 {
+    if (playbackLoading) return;
     if (playlistManager->isEmpty()) return;
 
     Song nextSong = playlistManager->getNextSong();
@@ -1360,6 +1455,7 @@ void Widget::playNextSong()
 
 void Widget::playPreviousSong()
 {
+    if (playbackLoading) return;
     if (playlistManager->isEmpty()) return;
 
     Song prevSong = playlistManager->getPreviousSong();
@@ -1408,10 +1504,11 @@ void Widget::updateVolumeIcon(int volume)
 
 void Widget::onPrevPageButtonClicked()
 {
+    if (currentSearchKeywords.isEmpty() || currentTotalPages <= 0) return;
+
     if (currentPage > 1) {
         currentPage--;
-        searchButton->setEnabled(false);
-        searchButton->setToolTip("加载中...");
+        setSearchLoading(true);
         if (currentSearchSource == SearchSource::NetEase) {
             apiManager->searchSongs(currentSearchKeywords, 15, (currentPage - 1) * 15);
         } else {
@@ -1422,10 +1519,11 @@ void Widget::onPrevPageButtonClicked()
 
 void Widget::onNextPageButtonClicked()
 {
+    if (currentSearchKeywords.isEmpty() || currentTotalPages <= 0 || currentPage >= currentTotalPages) return;
+
     // 这里的总页数判断依赖于 onSearchFinished 的结果
     currentPage++;
-    searchButton->setEnabled(false);
-    searchButton->setToolTip("加载中...");
+    setSearchLoading(true);
     if (currentSearchSource == SearchSource::NetEase) {
         apiManager->searchSongs(currentSearchKeywords, 15, (currentPage - 1) * 15);
     } else {
