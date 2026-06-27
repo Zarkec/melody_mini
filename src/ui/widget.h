@@ -10,7 +10,6 @@
 #include <QResizeEvent>
 #include <QCloseEvent>
 #include <QSystemTrayIcon>
-#include <QTimer>
 #include <QMovie>
 #include "core/playlistmanager.h" // 引入播放列表管理器
 
@@ -81,7 +80,6 @@ class QMenu;
 class QWidgetAction;
 class QAction;
 class QComboBox;
-class QBuffer;
 
 // 悬浮灵动岛窗口
 class FloatingIsland : public QWidget
@@ -92,7 +90,6 @@ public:
     explicit FloatingIsland(QWidget *parent = nullptr);
     void setSongInfo(const QString &name, const QString &artist, const QPixmap &cover);
     void setPlaying(bool playing);
-    void setPosition(qint64 position, qint64 duration);
     void updateBackground(); // 更新模糊背景
 
 protected:
@@ -129,14 +126,12 @@ private:
     bool isDragging;
     QPoint dragStartPos;
     QPoint windowStartPos;
-    QPoint originalPos; // 原始位置，用于双击复原
     QPixmap blurredBackground; // 模糊背景
 };
 
 class Widget : public QWidget
 {
     Q_OBJECT
-    Q_PROPERTY(QColor widgetBackgroundColor READ getWidgetBackgroundColor WRITE setWidgetStyle)
 
 public:
     Widget(QWidget *parent = nullptr);
@@ -155,7 +150,6 @@ private slots:
     void onBilibiliSearchFinished(const QJsonDocument &json, const QString &keywords, int page);
     void onBilibiliVideoInfoFinished(const QJsonDocument &json, const QString &bvid);
     void onBilibiliAudioUrlReady(const QUrl &url, const QString &bvid, qint64 cid);
-    void onBilibiliAudioDataReady(const QByteArray &data);
     void onBilibiliAudioFileReady(const QString &filePath);
     void onBilibiliImageDownloaded(const QByteArray &data, const QUrl &url);
 
@@ -201,8 +195,6 @@ private slots:
     // 托盘图标
     void onTrayIconActivated(QSystemTrayIcon::ActivationReason reason);
 
-    QColor getWidgetBackgroundColor() const;
-
 protected:
     void resizeEvent(QResizeEvent *event) override;
     void closeEvent(QCloseEvent *event) override;
@@ -215,16 +207,16 @@ private:
     void setPlaybackLoading(bool loading);
     void updatePlaybackControls();
     void cleanupTemporaryAudio();
+    void resetPlaybackUi(const QString &lyricText);
     void showStatusMessage(const QString &message, bool isError = false);
+    void searchCurrentPage();
     void enterTrayMode(bool showMessage);
     void restoreMainWindow();
     void refreshAudioDeviceList();
     bool applyAudioDeviceById(const QByteArray &deviceId);
 
     // 动态背景
-    QColor extractDominantColor(const QPixmap &pixmap);
     QVector<QColor> extractPaletteColors(const QPixmap &pixmap, int colorCount = 3);
-    void updateBackgroundColor(const QColor &color);
     void updateBackgroundWithPalette(const QVector<QColor> &colors);
     bool isColorDark(const QColor &color) const;
     void setWidgetStyle(const QColor &color);
@@ -271,7 +263,6 @@ private:
     LoadingSpinner *loadingSpinner;
     bool playbackLoading;
     QString currentTempAudioFilePath;
-    QBuffer *currentAudioBuffer;
     QMetaObject::Connection tempAudioCleanupConnection;
 
     // 媒体播放器
@@ -305,12 +296,10 @@ private:
     SearchSource currentSearchSource; // 当前搜索源
 
     // 动态背景
-    QPropertyAnimation *backgroundAnimation;
     QColor currentBackgroundColor;
     QPixmap originalAlbumArt;
     FlowingBackground *flowingBackground; // 流动背景控件
     QPropertyAnimation *flowAnimation; // 流动动画
-    QVector<QColor> currentPalette; // 当前调色板
 
     // 系统托盘
     QSystemTrayIcon *trayIcon;

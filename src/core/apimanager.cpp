@@ -330,21 +330,6 @@ void ApiManager::onBilibiliImageReplyFinished(QNetworkReply *reply)
     reply->deleteLater();
 }
 
-void ApiManager::onBilibiliAudioDownloadFinished(QNetworkReply *reply)
-{
-    if (reply->error() != QNetworkReply::NoError) {
-        emit error("下载Bilibili音频失败: " + reply->errorString());
-    } else {
-        QByteArray audioData = reply->readAll();
-        if (!audioData.isEmpty()) {
-            emit bilibiliAudioDataReady(audioData);
-        } else {
-            emit error("Bilibili音频数据为空");
-        }
-    }
-    reply->deleteLater();
-}
-
 void ApiManager::streamBilibiliAudio(const QUrl &url)
 {
     QNetworkRequest request(url);

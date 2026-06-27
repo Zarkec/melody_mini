@@ -8,7 +8,6 @@
 #include <QSlider>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
-#include <QBuffer>
 #include <QStackedWidget>
 #include <QAudioOutput>
 #include <QAudioDevice>
@@ -25,7 +24,6 @@
 #include <QWidgetAction>
 #include <QDebug>
 #include <QComboBox>
-#include <QTimer>
 #include <QPainter>
 #include <QPainterPath>
 #include <QEasingCurve>
@@ -141,13 +139,6 @@ void FloatingIsland::setPlaying(bool playing)
 {
     isPlaying = playing;
     playPauseBtn->setIcon(QIcon(playing ? ":/icons/pause.png" : ":/icons/play.png"));
-}
-
-void FloatingIsland::setPosition(qint64 position, qint64 duration)
-{
-    Q_UNUSED(position);
-    Q_UNUSED(duration);
-    // 可扩展：显示进度
 }
 
 void FloatingIsland::paintEvent(QPaintEvent *event)
@@ -417,16 +408,12 @@ Widget::Widget(QWidget *parent)
     currentPlayingSongId = -1;
     pendingCoverSource = SearchSource::NetEase;
     playbackLoading = false;
-    currentAudioBuffer = nullptr;
     isQuitting = false;
     userSelectedAudioDevice = false;
     currentSearchSource = SearchSource::NetEase; // 默认网易云音乐
 
     // --- 动态背景初始化 ---
     currentBackgroundColor = QColor(51, 51, 51);
-    backgroundAnimation = new QPropertyAnimation(this, "widgetBackgroundColor", this);
-    backgroundAnimation->setDuration(800);
-    backgroundAnimation->setEasingCurve(QEasingCurve::InOutQuad);
 
     // 流动背景控件
     flowingBackground = new FlowingBackground(this);
@@ -670,7 +657,6 @@ Widget::Widget(QWidget *parent)
     connect(apiManager, &ApiManager::bilibiliSearchFinished, this, &Widget::onBilibiliSearchFinished);
     connect(apiManager, &ApiManager::bilibiliVideoInfoFinished, this, &Widget::onBilibiliVideoInfoFinished);
     connect(apiManager, &ApiManager::bilibiliAudioUrlReady, this, &Widget::onBilibiliAudioUrlReady);
-    connect(apiManager, &ApiManager::bilibiliAudioDataReady, this, &Widget::onBilibiliAudioDataReady);
     connect(apiManager, &ApiManager::bilibiliAudioFileReady, this, &Widget::onBilibiliAudioFileReady);
     connect(apiManager, &ApiManager::bilibiliImageDownloaded, this, &Widget::onBilibiliImageDownloaded);
 
@@ -783,12 +769,16 @@ void Widget::onSearchButtonClicked()
         showStatusMessage(QString());
         setSearchLoading(true);
 
-        // 根据搜索源调用不同的API
-        if (currentSearchSource == SearchSource::NetEase) {
-            apiManager->searchSongs(currentSearchKeywords, 15, (currentPage - 1) * 15);
-        } else {
-            apiManager->searchBilibiliVideos(currentSearchKeywords, currentPage);
-        }
+        searchCurrentPage();
+    }
+}
+
+void Widget::searchCurrentPage()
+{
+    if (currentSearchSource == SearchSource::NetEase) {
+        apiManager->searchSongs(currentSearchKeywords, 15, (currentPage - 1) * 15);
+    } else {
+        apiManager->searchBilibiliVideos(currentSearchKeywords, currentPage);
     }
 }
 
@@ -856,11 +846,6 @@ void Widget::cleanupTemporaryAudio()
     if (tempAudioCleanupConnection) {
         disconnect(tempAudioCleanupConnection);
         tempAudioCleanupConnection = QMetaObject::Connection();
-    }
-
-    if (currentAudioBuffer) {
-        currentAudioBuffer->deleteLater();
-        currentAudioBuffer = nullptr;
     }
 
     if (!currentTempAudioFilePath.isEmpty()) {
@@ -1189,27 +1174,6 @@ void Widget::onBilibiliAudioUrlReady(const QUrl &url, const QString &bvid, qint6
     // 因为直接播放可能失败（403错误）
 }
 
-void Widget::onBilibiliAudioDataReady(const QByteArray &data)
-{
-    cleanupTemporaryAudio();
-
-    // 使用 QBuffer 播放下载的音频数据
-    currentAudioBuffer = new QBuffer(this);
-    currentAudioBuffer->setData(data);
-    currentAudioBuffer->open(QIODevice::ReadOnly);
-
-    // 设置媒体源为缓冲区
-    mediaPlayer->setSourceDevice(currentAudioBuffer);
-    mediaPlayer->play();
-
-    // 清理：当播放完成后删除缓冲区
-    tempAudioCleanupConnection = connect(mediaPlayer, &QMediaPlayer::playbackStateChanged, this, [this](QMediaPlayer::PlaybackState state) {
-        if (state == QMediaPlayer::StoppedState) {
-            cleanupTemporaryAudio();
-        }
-    });
-}
-
 void Widget::onBilibiliAudioFileReady(const QString &filePath)
 {
     cleanupTemporaryAudio();
@@ -1399,18 +1363,29 @@ void Widget::setPosition(int position)
 
 // --- 新增的私有和槽函数实现 ---
 
-void Widget::playSong(qint64 id)
+void Widget::resetPlaybackUi(const QString &lyricText)
 {
-    if (id <= 0) return;
-    setPlaybackLoading(true);
-    if (!currentTempAudioFilePath.isEmpty() || currentAudioBuffer) {
+    if (!currentTempAudioFilePath.isEmpty()) {
         mediaPlayer->stop();
     }
     cleanupTemporaryAudio();
     pendingCoverUrl = QUrl();
-    pendingCoverSource = SearchSource::NetEase;
     currentBilibiliAudioUrl.clear();
     currentBilibiliAudioBvid.clear();
+
+    originalAlbumArt = QPixmap();
+    albumArtLabel->setPixmap(QPixmap());
+    flowAnimation->stop(); // 停止流动动画
+    lyricLabel->setText(lyricText);
+    setWidgetStyle(QColor(51, 51, 51));
+}
+
+void Widget::playSong(qint64 id)
+{
+    if (id <= 0) return;
+    setPlaybackLoading(true);
+    resetPlaybackUi("歌词加载中...");
+    pendingCoverSource = SearchSource::NetEase;
 
     currentPlayingSongId = id; // 更新当前播放的歌曲ID
     currentBvid.clear(); // 清除Bilibili BV号
@@ -1424,15 +1399,6 @@ void Widget::playSong(qint64 id)
     } else {
         songNameLabel->setText("加载中...");
     }
-
-
-    // 重置UI
-    originalAlbumArt = QPixmap();
-    albumArtLabel->setPixmap(QPixmap());
-    flowAnimation->stop(); // 停止流动动画
-    currentPalette.clear();
-    lyricLabel->setText("歌词加载中...");
-    setWidgetStyle(QColor(51, 51, 51));
 
     // 请求播放链接
     apiManager->getSongUrl(id);
@@ -1449,14 +1415,8 @@ void Widget::playBilibiliVideo(const QString &bvid)
 {
     if (bvid.isEmpty()) return;
     setPlaybackLoading(true);
-    if (!currentTempAudioFilePath.isEmpty() || currentAudioBuffer) {
-        mediaPlayer->stop();
-    }
-    cleanupTemporaryAudio();
-    pendingCoverUrl = QUrl();
+    resetPlaybackUi("Bilibili视频 - 无歌词");
     pendingCoverSource = SearchSource::Bilibili;
-    currentBilibiliAudioUrl.clear();
-    currentBilibiliAudioBvid.clear();
 
     currentBvid = bvid; // 更新当前播放的BV号
     currentPlayingSongId = -1; // 清除网易云音乐ID
@@ -1470,14 +1430,6 @@ void Widget::playBilibiliVideo(const QString &bvid)
     } else {
         songNameLabel->setText("加载中...");
     }
-
-    // 重置UI
-    originalAlbumArt = QPixmap();
-    albumArtLabel->setPixmap(QPixmap());
-    flowAnimation->stop(); // 停止流动动画
-    currentPalette.clear();
-    lyricLabel->setText("Bilibili视频 - 无歌词");
-    setWidgetStyle(QColor(51, 51, 51));
 
     // 获取视频信息（包含cid和封面）
     apiManager->getBilibiliVideoInfo(bvid);
@@ -1604,11 +1556,7 @@ void Widget::onPrevPageButtonClicked()
     if (currentPage > 1) {
         currentPage--;
         setSearchLoading(true);
-        if (currentSearchSource == SearchSource::NetEase) {
-            apiManager->searchSongs(currentSearchKeywords, 15, (currentPage - 1) * 15);
-        } else {
-            apiManager->searchBilibiliVideos(currentSearchKeywords, currentPage);
-        }
+        searchCurrentPage();
     }
 }
 
@@ -1619,11 +1567,7 @@ void Widget::onNextPageButtonClicked()
     // 这里的总页数判断依赖于 onSearchFinished 的结果
     currentPage++;
     setSearchLoading(true);
-    if (currentSearchSource == SearchSource::NetEase) {
-        apiManager->searchSongs(currentSearchKeywords, 15, (currentPage - 1) * 15);
-    } else {
-        apiManager->searchBilibiliVideos(currentSearchKeywords, currentPage);
-    }
+    searchCurrentPage();
 }
 
 void Widget::onMainStackCurrentChanged(int index)
@@ -1653,21 +1597,6 @@ void Widget::parseLyrics(const QString &lyricText)
 }
 
 // --- 动态背景 ---
-
-QColor Widget::getWidgetBackgroundColor() const
-{
-    return currentBackgroundColor;
-}
-
-QColor Widget::extractDominantColor(const QPixmap &pixmap)
-{
-    if (pixmap.isNull()) {
-        return QColor(51, 51, 51); // 返回默认颜色
-    }
-    // 将图片缩放到1x1像素来获取平均颜色
-    QImage image = pixmap.toImage().scaled(1, 1, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-    return image.pixelColor(0, 0);
-}
 
 // 提取多个主色调（苹果音乐风格）
 QVector<QColor> Widget::extractPaletteColors(const QPixmap &pixmap, int colorCount)
@@ -1760,8 +1689,6 @@ QVector<QColor> Widget::extractPaletteColors(const QPixmap &pixmap, int colorCou
 // 使用调色板更新背景
 void Widget::updateBackgroundWithPalette(const QVector<QColor> &colors)
 {
-    currentPalette = colors;
-    
     if (colors.isEmpty()) {
         setWidgetStyle(QColor(51, 51, 51));
         flowAnimation->stop();
@@ -1786,92 +1713,96 @@ bool Widget::isColorDark(const QColor &color) const
     return (0.299 * color.red() + 0.587 * color.green() + 0.114 * color.blue()) < 128;
 }
 
-void Widget::setWidgetStyle(const QColor &color)
+namespace {
+QString buildWidgetStyleSheet(const QString &foregroundColor,
+                              const QString &lyricLabelStyle,
+                              const QString &inputBackground,
+                              const QString &comboViewStyle,
+                              const QString &buttonTextStyle,
+                              const QString &buttonHoverBackground,
+                              const QString &buttonPressedStyle,
+                              const QString &listBackground,
+                              const QString &listItemExtraStyle,
+                              const QString &listSelectedStyle,
+                              const QString &sliderGrooveBackground,
+                              const QString &menuStyle,
+                              const QString &mainWidgetStyle)
 {
-    currentBackgroundColor = color; // 更新当前颜色
-
-    QString foregroundColor = isColorDark(color) ? "#E0E0E0" : "#212121";
-    QString darkerColor = color.darker(150).name();
-
-    // 重建样式表
     QString styleSheet = QString(R"(
         QWidget {
             background-color: transparent; 
-            color: %1;
+            color: __FG__;
             font-family: 'Microsoft YaHei';
         }
         QLabel#backgroundLabel {
             background-color: transparent;
         }
+        __LYRIC_LABEL_STYLE__
         QLineEdit {
-            background-color: rgba(0, 0, 0, 0.2);
+            background-color: __INPUT_BG__;
             border: none;
             border-radius: 5px;
             padding: 5px;
-            color: %1;
+            color: __FG__;
         }
         QComboBox {
-            background-color: rgba(0, 0, 0, 0.2);
+            background-color: __INPUT_BG__;
             border: none;
             border-radius: 5px;
             padding: 5px;
-            color: %1;
+            color: __FG__;
         }
         QComboBox::drop-down {
             border: none;
         }
         QComboBox QAbstractItemView {
-            background-color: %3;
-            color: %1;
-            selection-background-color: %1;
-            selection-color: %2;
-            border: none;
+            __COMBO_VIEW_STYLE__
         }
         QPushButton {
-            background-color: rgba(0, 0, 0, 0.2);
+            background-color: __INPUT_BG__;
             border: none;
             border-radius: 5px;
             padding: 5px 10px;
+            __BUTTON_TEXT_STYLE__
         }
         QPushButton:hover {
-            background-color: rgba(255, 255, 255, 0.1);
+            background-color: __BUTTON_HOVER_BG__;
         }
         QPushButton:pressed {
-            background-color: %1;
-            color: %2;
+            __BUTTON_PRESSED_STYLE__
         }
         QListWidget {
-            background-color: rgba(0, 0, 0, 0.2);
+            background-color: __LIST_BG__;
             border: none;
             border-radius: 5px;
         }
         QListWidget::item {
             padding: 10px;
             background-color: transparent;
+            __LIST_ITEM_EXTRA_STYLE__
         }
         QListWidget::item:hover {
             background-color: rgba(255, 255, 255, 0.1);
         }
         QListWidget::item:selected {
-            background-color: %1;
-            color: %2;
+            __LIST_SELECTED_STYLE__
         }
         QSlider::groove:horizontal {
             border: none;
             height: 4px;
-            background: #3D3D3D;
+            background: __SLIDER_GROOVE_BG__;
             margin: 2px 0;
             border-radius: 2px;
         }
         QSlider::handle:horizontal {
-            background: %1;
+            background: __FG__;
             border: none;
             width: 12px;
             margin: -4px 0;
             border-radius: 6px;
         }
         QSlider::sub-page:horizontal {
-            background: %1;
+            background: __FG__;
             border: none;
             height: 4px;
             border-radius: 2px;
@@ -1879,34 +1810,68 @@ void Widget::setWidgetStyle(const QColor &color)
         QSlider::groove:vertical {
             border: none;
             width: 4px;
-            background: #3D3D3D;
+            background: __SLIDER_GROOVE_BG__;
             margin: 0 2px;
             border-radius: 2px;
         }
         QSlider::handle:vertical {
-            background: %1;
+            background: __FG__;
             border: none;
             height: 12px;
             margin: 0 -4px;
             border-radius: 6px;
         }
         QSlider::add-page:vertical {
-            background: %1;
+            background: __FG__;
             border: none;
             width: 4px;
             border-radius: 2px;
         }
         QMenu {
-            background-color: %3;
-            border: none;
+            __MENU_STYLE__
         }
-    )").arg(foregroundColor, color.name(), darkerColor);
+    )");
 
+    styleSheet.replace("__FG__", foregroundColor);
+    styleSheet.replace("__LYRIC_LABEL_STYLE__", lyricLabelStyle);
+    styleSheet.replace("__INPUT_BG__", inputBackground);
+    styleSheet.replace("__COMBO_VIEW_STYLE__", comboViewStyle);
+    styleSheet.replace("__BUTTON_TEXT_STYLE__", buttonTextStyle);
+    styleSheet.replace("__BUTTON_HOVER_BG__", buttonHoverBackground);
+    styleSheet.replace("__BUTTON_PRESSED_STYLE__", buttonPressedStyle);
+    styleSheet.replace("__LIST_BG__", listBackground);
+    styleSheet.replace("__LIST_ITEM_EXTRA_STYLE__", listItemExtraStyle);
+    styleSheet.replace("__LIST_SELECTED_STYLE__", listSelectedStyle);
+    styleSheet.replace("__SLIDER_GROOVE_BG__", sliderGrooveBackground);
+    styleSheet.replace("__MENU_STYLE__", menuStyle);
+    return styleSheet + mainWidgetStyle;
+}
+}
+
+void Widget::setWidgetStyle(const QColor &color)
+{
+    currentBackgroundColor = color; // 更新当前颜色
+
+    QString foregroundColor = isColorDark(color) ? "#E0E0E0" : "#212121";
+    QString darkerColor = color.darker(150).name();
     QString mainWidgetStyle = QString(
         "QWidget#mainWidget { background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 1, stop: 0 %1, stop: 1 %2); }"
     ).arg(color.name(), darkerColor);
-    
-    this->setStyleSheet(styleSheet + mainWidgetStyle);
+
+    this->setStyleSheet(buildWidgetStyleSheet(
+        foregroundColor,
+        QString(),
+        "rgba(0, 0, 0, 0.2)",
+        QString("background-color: %1; color: %2; selection-background-color: %2; selection-color: %3; border: none;").arg(darkerColor, foregroundColor, color.name()),
+        QString(),
+        "rgba(255, 255, 255, 0.1)",
+        QString("background-color: %1; color: %2;").arg(foregroundColor, color.name()),
+        "rgba(0, 0, 0, 0.2)",
+        QString(),
+        QString("background-color: %1; color: %2;").arg(foregroundColor, color.name()),
+        "#3D3D3D",
+        QString("background-color: %1; border: none;").arg(darkerColor),
+        mainWidgetStyle));
 }
 
 // 使用调色板设置样式（苹果音乐风格）
@@ -1916,147 +1881,28 @@ void Widget::setWidgetStyleWithPalette(const QVector<QColor> &colors)
         setWidgetStyle(QColor(51, 51, 51));
         return;
     }
-    
+
     QColor primaryColor = colors.first();
     currentBackgroundColor = primaryColor;
-    
-    // 由于模糊背景有暗色遮罩，始终使用浅色文字
+
     QString foregroundColor = "#FFFFFF";
     QString foregroundColorMuted = "rgba(255, 255, 255, 0.7)";
-    
-    QString darkerColor = colors.last().darker(150).name();
-    
-    QString styleSheet = QString(R"(
-        QWidget {
-            background-color: transparent; 
-            color: %1;
-            font-family: 'Microsoft YaHei';
-        }
-        QLabel#backgroundLabel {
-            background-color: transparent;
-        }
-        QLabel#lyricLabel {
-            color: %2;
-        }
-        QLineEdit {
-            background-color: rgba(0, 0, 0, 0.35);
-            border: none;
-            border-radius: 5px;
-            padding: 5px;
-            color: %1;
-        }
-        QComboBox {
-            background-color: rgba(0, 0, 0, 0.35);
-            border: none;
-            border-radius: 5px;
-            padding: 5px;
-            color: %1;
-        }
-        QComboBox::drop-down {
-            border: none;
-        }
-        QComboBox QAbstractItemView {
-            background-color: rgba(30, 30, 30, 0.95);
-            color: %1;
-            selection-background-color: rgba(255, 255, 255, 0.2);
-            selection-color: %1;
-            border: none;
-            border-radius: 5px;
-        }
-        QPushButton {
-            background-color: rgba(0, 0, 0, 0.35);
-            border: none;
-            border-radius: 5px;
-            padding: 5px 10px;
-            color: %1;
-        }
-        QPushButton:hover {
-            background-color: rgba(255, 255, 255, 0.15);
-        }
-        QPushButton:pressed {
-            background-color: rgba(255, 255, 255, 0.25);
-        }
-        QListWidget {
-            background-color: rgba(0, 0, 0, 0.35);
-            border: none;
-            border-radius: 5px;
-        }
-        QListWidget::item {
-            padding: 10px;
-            background-color: transparent;
-            border-radius: 5px;
-        }
-        QListWidget::item:hover {
-            background-color: rgba(255, 255, 255, 0.1);
-        }
-        QListWidget::item:selected {
-            background-color: rgba(255, 255, 255, 0.2);
-        }
-        QSlider::groove:horizontal {
-            border: none;
-            height: 4px;
-            background: rgba(255, 255, 255, 0.2);
-            margin: 2px 0;
-            border-radius: 2px;
-        }
-        QSlider::handle:horizontal {
-            background: %1;
-            border: none;
-            width: 12px;
-            margin: -4px 0;
-            border-radius: 6px;
-        }
-        QSlider::sub-page:horizontal {
-            background: %1;
-            border: none;
-            height: 4px;
-            border-radius: 2px;
-        }
-        QSlider::groove:vertical {
-            border: none;
-            width: 4px;
-            background: rgba(255, 255, 255, 0.2);
-            margin: 0 2px;
-            border-radius: 2px;
-        }
-        QSlider::handle:vertical {
-            background: %1;
-            border: none;
-            height: 12px;
-            margin: 0 -4px;
-            border-radius: 6px;
-        }
-        QSlider::add-page:vertical {
-            background: %1;
-            border: none;
-            width: 4px;
-            border-radius: 2px;
-        }
-        QMenu {
-            background-color: rgba(30, 30, 30, 0.95);
-            border: none;
-            border-radius: 5px;
-            padding: 5px;
-            color: %1;
-        }
-    )").arg(foregroundColor, foregroundColorMuted);
+    QString mainWidgetStyle = "QWidget#mainWidget { background-color: rgba(0, 0, 0, 0.1); }";
 
-    // 背景使用半透明以便看到模糊背景
-    QString mainWidgetStyle = QString(
-        "QWidget#mainWidget { background-color: rgba(0, 0, 0, 0.1); }"
-    );
-    
-    this->setStyleSheet(styleSheet + mainWidgetStyle);
-}
-
-void Widget::updateBackgroundColor(const QColor &newColor)
-{
-    if (backgroundAnimation->state() == QAbstractAnimation::Running) {
-        backgroundAnimation->stop();
-    }
-    backgroundAnimation->setStartValue(currentBackgroundColor);
-    backgroundAnimation->setEndValue(newColor);
-    backgroundAnimation->start();
+    this->setStyleSheet(buildWidgetStyleSheet(
+        foregroundColor,
+        QString("QLabel#lyricLabel { color: %1; }").arg(foregroundColorMuted),
+        "rgba(0, 0, 0, 0.35)",
+        "background-color: rgba(30, 30, 30, 0.95); color: #FFFFFF; selection-background-color: rgba(255, 255, 255, 0.2); selection-color: #FFFFFF; border: none; border-radius: 5px;",
+        "color: #FFFFFF;",
+        "rgba(255, 255, 255, 0.15)",
+        "background-color: rgba(255, 255, 255, 0.25);",
+        "rgba(0, 0, 0, 0.35)",
+        "border-radius: 5px;",
+        "background-color: rgba(255, 255, 255, 0.2);",
+        "rgba(255, 255, 255, 0.2)",
+        "background-color: rgba(30, 30, 30, 0.95); border: none; border-radius: 5px; padding: 5px; color: #FFFFFF;",
+        mainWidgetStyle));
 }
 
 void Widget::enterTrayMode(bool showMessage)
