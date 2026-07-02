@@ -73,14 +73,14 @@ Item {
                     width: parent.width
                     text: controller.currentSongName || "未在播放"
                     color: "white"
-                    font { pixelSize: 13; bold: true; family: "Segoe UI" }
+                    font { pixelSize: 13; bold: true }
                     elide: Text.ElideRight
                 }
                 Text {
                     width: parent.width
                     text: controller.currentArtist || ""
                     color: Qt.rgba(1,1,1,0.45)
-                    font { pixelSize: 11; family: "Segoe UI" }
+                    font { pixelSize: 11 }
                     elide: Text.ElideRight
                 }
             }

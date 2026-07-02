@@ -68,14 +68,14 @@ Window {
                     Layout.fillWidth: true
                     text: controller.currentSongName || "未在播放"
                     color: "white"
-                    font { pixelSize: 11; bold: true; family: "Segoe UI" }
+                    font { pixelSize: 11; bold: true }
                     elide: Text.ElideRight
                 }
                 Text {
                     Layout.fillWidth: true
                     text: controller.currentArtist || ""
                     color: Qt.rgba(1,1,1,0.6)
-                    font { pixelSize: 9; family: "Segoe UI" }
+                    font { pixelSize: 9 }
                     elide: Text.ElideRight
                 }
             }

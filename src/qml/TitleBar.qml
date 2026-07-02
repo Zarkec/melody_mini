@@ -34,7 +34,7 @@ Item {
         Text {
             text: "Melody"
             color: "white"
-            font { family: "Segoe UI"; pixelSize: 14; weight: Font.Medium }
+            font { pixelSize: 14; weight: Font.Medium }
             opacity: 0.9
         }
     }

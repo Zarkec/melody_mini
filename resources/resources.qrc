@@ -19,5 +19,8 @@
     <file>icons/minimize.png</file>
     <file>icons/maximize.png</file>
     <file>icons/loading.gif</file>
+    <file>fonts/JetBrainsMono.ttf</file>
+    <file>fonts/HarmonyOS_Sans_SC_Medium.ttf</file>
+    <file>fonts/codicons.ttf</file>
 </qresource>
 </RCC>

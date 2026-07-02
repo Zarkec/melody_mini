@@ -6,6 +6,8 @@
 #include <QSurfaceFormat>
 #include <QFile>
 #include <QTextStream>
+#include <QFontDatabase>
+#include <QFont>
 #include "core/musiccontroller.h"
 
 static QFile *g_logFile = nullptr;
@@ -36,6 +38,24 @@ int main(int argc, char *argv[])
     app.setWindowIcon(QIcon(":/logo.png"));
     app.setApplicationName("Melody");
     app.setOrganizationName("Melody");
+
+    // Font loading: JetBrains Mono (base) + HarmonyOS Sans SC (CJK fallback) + codicons.
+    // Reference: ImZiv (ImGui) uses ImFont merge mode; Qt equivalent is insertSubstitution.
+    int idJetBrains = QFontDatabase::addApplicationFont(":/fonts/JetBrainsMono.ttf");
+    int idHarmony   = QFontDatabase::addApplicationFont(":/fonts/HarmonyOS_Sans_SC_Medium.ttf");
+    QFontDatabase::addApplicationFont(":/fonts/codicons.ttf");
+
+    const QStringList jetbrainsFamilies = QFontDatabase::applicationFontFamilies(idJetBrains);
+    const QStringList harmonyFamilies   = QFontDatabase::applicationFontFamilies(idHarmony);
+    if (!jetbrainsFamilies.isEmpty()) {
+        QFont baseFont(jetbrainsFamilies.first());
+        baseFont.setPixelSize(13);
+        app.setFont(baseFont);
+        if (!harmonyFamilies.isEmpty()) {
+            // CJK glyphs missing in JetBrains Mono fall back to HarmonyOS Sans SC.
+            QFont::insertSubstitution(jetbrainsFamilies.first(), harmonyFamilies.first());
+        }
+    }
 
     MusicController controller;
 

@@ -44,7 +44,7 @@ Item {
                     rightPadding: 24
                     text: pageSelector.displayText
                     color: "white"
-                    font { pixelSize: 11; family: "Segoe UI" }
+                    font { pixelSize: 11 }
                     verticalAlignment: Text.AlignVCenter
                     elide: Text.ElideRight
                 }
@@ -102,7 +102,7 @@ Item {
                     contentItem: Text {
                         text: modelData.label || ""
                         color: highlighted ? "white" : Qt.rgba(1,1,1,0.7)
-                        font { pixelSize: 11; family: "Segoe UI" }
+                        font { pixelSize: 11 }
                         elide: Text.ElideRight
                         verticalAlignment: Text.AlignVCenter
                     }
@@ -147,7 +147,6 @@ Item {
                     Text {
                         text: "暂无封面"
                         font.pixelSize: 12
-                        font.family: "Segoe UI"
                         color: Qt.rgba(1,1,1,0.25)
                         anchors.horizontalCenter: parent.horizontalCenter
                     }
@@ -164,7 +163,7 @@ Item {
                 width: parent.width
                 text: controller.currentSongName || "未在播放"
                 color: "white"
-                font { pixelSize: 18; bold: true; family: "Segoe UI" }
+                font { pixelSize: 18; bold: true }
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignHCenter
             }
@@ -172,7 +171,7 @@ Item {
                 width: parent.width
                 text: controller.currentArtist || ""
                 color: Qt.rgba(1,1,1,0.55)
-                font { pixelSize: 13; family: "Segoe UI" }
+                font { pixelSize: 13 }
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignHCenter
             }
@@ -183,7 +182,7 @@ Item {
             Layout.fillWidth: true
             text: controller.currentLyric || "欢迎使用 Melody"
             color: Qt.rgba(1,1,1,0.60)
-            font { pixelSize: 13; family: "Segoe UI" }
+            font { pixelSize: 13 }
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
             Layout.maximumHeight: 40
@@ -244,9 +243,9 @@ Item {
 
             RowLayout {
                 width: parent.width
-                Text { text: controller.formatTime(controller.position); color: Qt.rgba(1,1,1,0.5); font { pixelSize: 11; family: "Segoe UI" } }
+                Text { text: controller.formatTime(controller.position); color: Qt.rgba(1,1,1,0.5); font { pixelSize: 11 } }
                 Item { Layout.fillWidth: true }
-                Text { text: controller.formatTime(controller.duration); color: Qt.rgba(1,1,1,0.5); font { pixelSize: 11; family: "Segoe UI" } }
+                Text { text: controller.formatTime(controller.duration); color: Qt.rgba(1,1,1,0.5); font { pixelSize: 11 } }
             }
         }
 
@@ -427,7 +426,7 @@ Item {
             Text {
                 text: "输出设备"
                 color: Qt.rgba(1,1,1,0.5)
-                font { pixelSize: 10; family: "Segoe UI" }
+                font { pixelSize: 10 }
             }
 
             ListView {
@@ -439,7 +438,7 @@ Item {
                     width: parent ? parent.width : 0
                     text: modelData.name || ""
                     color: index === controller.currentAudioDeviceIndex ? "white" : Qt.rgba(1,1,1,0.45)
-                    font { pixelSize: 11; family: "Segoe UI"; bold: index === controller.currentAudioDeviceIndex }
+                    font { pixelSize: 11; bold: index === controller.currentAudioDeviceIndex }
                     elide: Text.ElideRight
                     height: 22
                     MouseArea { anchors.fill: parent; onClicked: controller.selectAudioDevice(index) }
@@ -449,7 +448,7 @@ Item {
             Text {
                 text: "音量 " + controller.volume + "%"
                 color: Qt.rgba(1,1,1,0.5)
-                font { pixelSize: 10; family: "Segoe UI" }
+                font { pixelSize: 10 }
             }
 
             Slider {

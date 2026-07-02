@@ -38,7 +38,7 @@ Item {
                         anchors.centerIn: parent
                         text: modelData
                         color: "white"
-                        font { pixelSize: 12; family: "Segoe UI" }
+                        font { pixelSize: 12 }
                         opacity: controller.searchSource === index ? 1.0 : 0.5
                         Behavior on opacity { NumberAnimation { duration: 180 } }
                     }
@@ -84,7 +84,7 @@ Item {
                         height: parent.height
                         color: "white"
                         selectionColor: Qt.rgba(0.6, 0.5, 1, 0.4)
-                        font { pixelSize: 13; family: "Segoe UI" }
+                        font { pixelSize: 13 }
                         clip: true
                         verticalAlignment: TextInput.AlignVCenter
                         Keys.onReturnPressed: doSearch()
@@ -147,7 +147,7 @@ Item {
             visible: controller.statusMessage !== ""
             text: controller.statusMessage
             color: controller.statusIsError ? "#ff6b6b" : Qt.rgba(1,1,1,0.55)
-            font { pixelSize: 12; family: "Segoe UI" }
+            font { pixelSize: 12 }
             wrapMode: Text.WordWrap
             Layout.fillWidth: true
         }
@@ -204,14 +204,14 @@ Item {
                             width: parent.width
                             text: modelData.title || ""
                             color: "white"
-                            font { pixelSize: 13; family: "Segoe UI" }
+                            font { pixelSize: 13 }
                             elide: Text.ElideRight
                         }
                         Text {
                             width: parent.width
                             text: modelData.artist || ""
                             color: Qt.rgba(1,1,1,0.45)
-                            font { pixelSize: 11; family: "Segoe UI" }
+                            font { pixelSize: 11 }
                             elide: Text.ElideRight
                         }
                     }
@@ -249,7 +249,7 @@ Item {
                     Text {
                         text: "搜索中…"
                         color: Qt.rgba(1,1,1,0.4)
-                        font { pixelSize: 12; family: "Segoe UI" }
+                        font { pixelSize: 12 }
                         anchors.horizontalCenter: parent.horizontalCenter
                     }
                 }
@@ -268,7 +268,7 @@ Item {
                 Text {
                     text: "搜索你喜欢的音乐"
                     color: Qt.rgba(1,1,1,0.30)
-                    font { pixelSize: 13; family: "Segoe UI" }
+                    font { pixelSize: 13 }
                     anchors.horizontalCenter: parent.horizontalCenter
                 }
             }
@@ -297,7 +297,7 @@ Item {
                     ? ("第 " + controller.currentPage + " / " + controller.totalPages + " 页")
                     : ""
                 color: Qt.rgba(1,1,1,0.50)
-                font { pixelSize: 12; family: "Segoe UI" }
+                font { pixelSize: 12 }
             }
 
             IconBtn {
