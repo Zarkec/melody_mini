@@ -547,7 +547,7 @@ void MusicController::onBilibiliSearchFinished(const QJsonDocument &json, const 
 
     QJsonObject root = json.object();
     if (root.value("code").toInt() != 0) {
-        showStatus(root.value("message").toString().isEmpty() ? tr("Bilibili搜索失败。") : root.value("message").toString(), true);
+        qCWarning(logPlayer) << "Bilibili search API error:" << root.value("message").toString();
         return;
     }
     QJsonObject data = root.value("data").toObject();
@@ -650,7 +650,7 @@ void MusicController::onBilibiliVideoInfoFinished(const QJsonDocument &json, con
     if (requestBvid != m_currentBvid) return;
     QJsonObject root = json.object();
     if (root.value("code").toInt() != 0) {
-        showStatus(root.value("message").toString().isEmpty() ? tr("获取Bilibili视频信息失败。") : root.value("message").toString(), true);
+        qCWarning(logPlayer) << "Bilibili videoInfo API error:" << root.value("message").toString();
         setPlaybackLoading(false);
         return;
     }
@@ -724,7 +724,6 @@ void MusicController::onApiError(const QString &errorString)
     qCWarning(logPlayer).noquote() << "API error:" << errorString;
     setSearchLoading(false);
     setPlaybackLoading(false);
-    showStatus(errorString, true);
 }
 
 // ============================================================
@@ -780,7 +779,6 @@ void MusicController::onMediaPlayerError(QMediaPlayer::Error error, const QStrin
         m_currentBilibiliAudioBvid.clear();
     } else {
         setPlaybackLoading(false);
-        showStatus(errorString.isEmpty() ? tr("播放失败，请稍后重试。") : errorString, true);
     }
 }
 
