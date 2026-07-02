@@ -21,7 +21,7 @@ Rectangle {
         anchors.centerIn: parent
         text: root.symbol
         color: "white"
-        font.pixelSize: 11
+        font.pixelSize: 22
         opacity: root.hovered ? 1.0 : 0.7
     }
 

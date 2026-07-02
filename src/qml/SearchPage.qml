@@ -83,7 +83,7 @@ Item {
                         Layout.fillWidth: true
                         height: parent.height
                         color: "white"
-                        selectionColor: Qt.rgba(0.6, 0.5, 1, 0.4)
+                        selectionColor: Qt.rgba(0.7, 0.7, 0.7, 0.4)
                         font { pixelSize: 13 }
                         clip: true
                         verticalAlignment: TextInput.AlignVCenter
@@ -105,11 +105,13 @@ Item {
                         id: clearBtn
                         visible: searchField.text.length > 0
                         text: "✕"
-                        color: Qt.rgba(1,1,1,0.4)
-                        font.pixelSize: 11
+                        color: clearHover.containsMouse ? "#e74c3c" : Qt.rgba(1,1,1,0.4)
+                        font.pixelSize: 16
                         Layout.alignment: Qt.AlignVCenter
                         MouseArea {
+                            id: clearHover
                             anchors.fill: parent
+                            hoverEnabled: true
                             onClicked: searchField.text = ""
                         }
                     }
@@ -122,7 +124,7 @@ Item {
                 Layout.preferredWidth: 42
                 Layout.preferredHeight: 42
                 radius: 12
-                color: searchBtnArea.pressed ? Qt.rgba(0.6,0.5,1,0.30) : Qt.rgba(1,1,1,0.09)
+                color: searchBtnArea.pressed ? Qt.rgba(0.7,0.7,0.7,0.30) : Qt.rgba(1,1,1,0.09)
                 Behavior on color { ColorAnimation { duration: 120 } }
 
                 Image {

@@ -195,15 +195,8 @@ Window {
 
 
 
-    Connections {
-        target: controller
-        function onCurrentSongChanged() {
-            if (controller.currentSongName !== "") {
-                mainWindow.showPlayer()
-            }
-        }
-    }
-
+    // Mini player bar 的 tapped() 才是进入播放页的唯一入口；
+    // 切歌（上一曲/下一曲/自动续播）不应强制跳转到播放页。
     // ── Mini player bar (always visible) ─────────────────────
     PlayerBar {
         id: playerBar

@@ -224,8 +224,8 @@ Item {
                         radius: 2
                         gradient: Gradient {
                             orientation: Gradient.Horizontal
-                            GradientStop { position: 0; color: "#a78bfa" }
-                            GradientStop { position: 1; color: "#818cf8" }
+                            GradientStop { position: 0; color: "#d1d5db" }
+                            GradientStop { position: 1; color: "#9ca3af" }
                         }
                     }
                 }
@@ -325,7 +325,7 @@ Item {
                                 // Active spinning arc
                                 ctx.beginPath()
                                 ctx.arc(width/2, height/2, width/2 - 2.5, 0, 1.5*Math.PI)
-                                ctx.strokeStyle = "#a78bfa"
+                                ctx.strokeStyle = "#d1d5db"
                                 ctx.lineWidth = 2.5
                                 ctx.stroke()
                             }
@@ -462,7 +462,7 @@ Item {
                     color: Qt.rgba(1,1,1,0.18)
                     Rectangle {
                         width: parent.parent.visualPosition * parent.width
-                        height: parent.height; radius: 2; color: "#a78bfa"
+                        height: parent.height; radius: 2; color: "#d1d5db"
                     }
                 }
                 handle: Rectangle {

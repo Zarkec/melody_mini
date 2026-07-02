@@ -31,8 +31,8 @@ Item {
             gradient: Gradient {
                 orientation: Gradient.Horizontal
                 GradientStop { position: 0; color: "transparent" }
-                GradientStop { position: 0.3; color: "#a78bfa" }
-                GradientStop { position: 0.7; color: "#818cf8" }
+                GradientStop { position: 0.3; color: "#d1d5db" }
+                GradientStop { position: 0.7; color: "#9ca3af" }
                 GradientStop { position: 1; color: "transparent" }
             }
         }
@@ -120,7 +120,7 @@ Item {
                             // Active spinning arc
                             ctx.beginPath()
                             ctx.arc(width/2, height/2, width/2 - 2.0, 0, 1.5*Math.PI)
-                            ctx.strokeStyle = "#a78bfa"
+                            ctx.strokeStyle = "#d1d5db"
                             ctx.lineWidth = 2.0
                             ctx.stroke()
                         }
