@@ -220,8 +220,18 @@ void MusicController::playPause()
 void MusicController::playNext()
 {
     if (m_playbackLoading || m_playlist->isEmpty()) return;
-    Song next = m_playlist->getNextSong();
     savePlaybackState();
+
+    // Bilibili多P视频：优先播放下一个分P
+    if (!m_currentBvid.isEmpty() && m_bilibiliPages.size() > 1) {
+        int nextPage = m_currentBilibiliPageIndex + 1;
+        if (nextPage < m_bilibiliPages.size()) {
+            selectBilibiliPage(nextPage);
+            return;
+        }
+    }
+
+    Song next = m_playlist->getNextSong();
     if (next.source == SearchSource::Bilibili && !next.bvid.isEmpty())
         playBilibiliVideo(next.bvid);
     else if (next.id != -1)
@@ -231,8 +241,18 @@ void MusicController::playNext()
 void MusicController::playPrev()
 {
     if (m_playbackLoading || m_playlist->isEmpty()) return;
-    Song prev = m_playlist->getPreviousSong();
     savePlaybackState();
+
+    // Bilibili多P视频：优先播放上一个分P
+    if (!m_currentBvid.isEmpty() && m_bilibiliPages.size() > 1) {
+        int prevPage = m_currentBilibiliPageIndex - 1;
+        if (prevPage >= 0) {
+            selectBilibiliPage(prevPage);
+            return;
+        }
+    }
+
+    Song prev = m_playlist->getPreviousSong();
     if (prev.source == SearchSource::Bilibili && !prev.bvid.isEmpty())
         playBilibiliVideo(prev.bvid);
     else if (prev.id != -1)
@@ -886,8 +906,6 @@ void MusicController::onMediaStatusChanged(QMediaPlayer::MediaStatus status)
     qCDebug(logPlayer) << "MediaStatus:" << status;
     if (status == QMediaPlayer::EndOfMedia) {
         qCInfo(logPlayer) << "EndOfMedia -> playNext";
-        m_currentPlayingSongId = -1;
-        m_currentBvid.clear();
         playNext();
         emit hasMediaChanged();
     }
