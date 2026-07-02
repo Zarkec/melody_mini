@@ -108,21 +108,28 @@ Window {
         color: Theme.surfaceBase
         clip: true
 
-        // ── Animated flowing background ───────────────────────────
-        FlowingBackground {
-            id: flowBg
-            anchors.fill: parent
-            colors: mainWindow.bgColors
-        }
-
-        // Dark overlay for readability
+        // Spotify-style static gradient background
         Rectangle {
+            id: spotifyBg
             anchors.fill: parent
             radius: Theme.radiusSm
-            gradient: Gradient {
-                orientation: Gradient.Vertical
-                GradientStop { position: 0.0; color: "transparent" }
-                GradientStop { position: 1.0; color: Qt.rgba(0,0,0,0.55) }
+            color: Theme.surfaceBase
+
+            // Gradient fading from the dominant cover color to transparent
+            Rectangle {
+                anchors.fill: parent
+                radius: Theme.radiusSm
+                gradient: Gradient {
+                    orientation: Gradient.Vertical
+                    GradientStop {
+                        position: 0.0
+                        color: Qt.darker(mainWindow.bgColors.length >= 1 ? mainWindow.bgColors[0] : "#1e1e24", 1.2)
+                    }
+                    GradientStop {
+                        position: 0.6
+                        color: "transparent"
+                    }
+                }
             }
         }
 

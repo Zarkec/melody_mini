@@ -4,6 +4,7 @@
 #include <QQuickStyle>
 #include <QIcon>
 #include <QSurfaceFormat>
+#include <QQuickWindow>
 #include <QFontDatabase>
 #include <QFont>
 #include "core/logger.h"
@@ -11,7 +12,9 @@
 
 int main(int argc, char *argv[])
 {
-    // Enable window alpha buffer for transparent/rounded corners
+    // Enable window alpha buffer for transparent/rounded corners (RHI backends like D3D11/Vulkan/OpenGL)
+    QQuickWindow::setDefaultAlphaBuffer(true);
+
     QSurfaceFormat format;
     format.setAlphaBufferSize(8);
     QSurfaceFormat::setDefaultFormat(format);
