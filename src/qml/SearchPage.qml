@@ -6,6 +6,7 @@ import Melody
 // Search page: search bar + source selector + result list + pagination
 Item {
     id: root
+    property bool syncingSearchText: false
     signal songClicked(int index)
 
     ColumnLayout {
@@ -90,6 +91,16 @@ Item {
                         clip: true
                         verticalAlignment: TextInput.AlignVCenter
                         Keys.onReturnPressed: doSearch()
+                        Component.onCompleted: setSearchText(controller.currentKeywords)
+                        onTextChanged: {
+                            if (!root.syncingSearchText)
+                                root.searchDrafts[controller.searchSource] = text
+                        }
+
+                        Connections {
+                            target: controller
+                            function onCurrentKeywordsChanged() { setSearchText(controller.currentKeywords) }
+                        }
 
                         Text {
                             visible: !searchField.text && !searchField.activeFocus
@@ -332,6 +343,12 @@ Item {
                 onClicked: controller.nextPage()
             }
         }
+    }
+
+    function setSearchText(text) {
+        root.syncingSearchText = true
+        searchField.text = text || ""
+        root.syncingSearchText = false
     }
 
     function doSearch() {

@@ -21,7 +21,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Qt（Qt6）— 添加 Quick 和 QuickControls2
 # -------------------------------------------------
 find_package(Qt6 6.5 REQUIRED COMPONENTS
-    Core Gui Quick QuickControls2 Network Multimedia)
+    Core Gui Quick QuickControls2 Network Multimedia Sql)
 
 message(STATUS "Found Qt version: ${Qt6_VERSION}")
 
@@ -34,6 +34,7 @@ set(CORE_SOURCES
     ${SRC_DIR}/core/apimanager.cpp
     ${SRC_DIR}/core/playlistmanager.cpp
     ${SRC_DIR}/core/musiccontroller.cpp
+    ${SRC_DIR}/core/appstatestore.cpp
     ${SRC_DIR}/core/logger.cpp
 )
 
@@ -41,6 +42,7 @@ set(CORE_HEADERS
     ${SRC_DIR}/core/apimanager.h
     ${SRC_DIR}/core/playlistmanager.h
     ${SRC_DIR}/core/musiccontroller.h
+    ${SRC_DIR}/core/appstatestore.h
     ${SRC_DIR}/core/logger.h
 )
 
@@ -124,6 +126,7 @@ target_link_libraries(melody PRIVATE
     Qt6::QuickControls2
     Qt6::Network
     Qt6::Multimedia
+    Qt6::Sql
 )
 
 # -------------------------------------------------

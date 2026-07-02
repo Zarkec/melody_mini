@@ -86,6 +86,18 @@ void PlaylistManager::setPlayMode(PlayMode mode)
     currentMode = mode;
 }
 
+QVector<Song> PlaylistManager::songs() const
+{
+    return playlist;
+}
+
+void PlaylistManager::restoreSongs(const QVector<Song> &songs, int index)
+{
+    playlist = songs;
+    currentIndex = (index >= 0 && index < playlist.size()) ? index : -1;
+    qCInfo(logPlaylist) << "Playlist restored:" << playlist.size() << "songs, index" << currentIndex;
+}
+
 // 获取当前播放模式
 PlaylistManager::PlayMode PlaylistManager::getPlayMode() const
 {

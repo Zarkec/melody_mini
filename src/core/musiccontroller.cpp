@@ -1,5 +1,6 @@
 #include "musiccontroller.h"
 #include "apimanager.h"
+#include "appstatestore.h"
 
 #include <QMediaPlayer>
 #include <QDir>
@@ -32,6 +33,7 @@ MusicController::MusicController(QObject *parent)
     // API + playlist
     m_api = new ApiManager(this);
     m_playlist = new PlaylistManager(this);
+    m_stateStore = std::make_unique<AppStateStore>();
 
     // Media player signals
     connect(m_player, &QMediaPlayer::positionChanged, this, &MusicController::onPositionChanged);
@@ -57,6 +59,8 @@ MusicController::MusicController(QObject *parent)
     connect(m_api, &ApiManager::bilibiliAudioFileReady, this, &MusicController::onBilibiliAudioFileReady);
     connect(m_api, &ApiManager::bilibiliImageDownloaded, this, &MusicController::onBilibiliImageDownloaded);
     connect(m_api, &ApiManager::error, this, &MusicController::onApiError);
+
+    loadPersistedState();
 }
 
 MusicController::~MusicController()
@@ -80,13 +84,14 @@ QString MusicController::currentSongName() const { return m_currentSongName; }
 QString MusicController::currentArtist() const { return m_currentArtist; }
 QString MusicController::currentLyric() const { return m_currentLyric; }
 QUrl MusicController::albumArtUrl() const { return m_albumArtUrl; }
-QVariantList MusicController::searchResults() const { return m_searchResults; }
-int MusicController::currentPage() const { return m_currentPage; }
-int MusicController::totalPages() const { return m_totalPages; }
+QVariantList MusicController::searchResults() const { return activeSearchState().results; }
+int MusicController::currentPage() const { return activeSearchState().page; }
+int MusicController::totalPages() const { return activeSearchState().totalPages; }
 bool MusicController::isSearchLoading() const { return m_searchLoading; }
 QString MusicController::statusMessage() const { return m_statusMessage; }
 bool MusicController::statusIsError() const { return m_statusIsError; }
 int MusicController::searchSource() const { return m_searchSource; }
+QString MusicController::currentKeywords() const { return activeSearchState().keywords; }
 int MusicController::playMode() const { return static_cast<int>(m_playlist->getPlayMode()); }
 QVariantList MusicController::audioDevices() const { return m_audioDevices; }
 int MusicController::currentAudioDeviceIndex() const { return m_currentAudioDeviceIndex; }
@@ -103,19 +108,20 @@ void MusicController::setVolume(int vol)
     float v = qBound(0, vol, 100) / 100.0f;
     if (qFuzzyCompare(m_audioOutput->volume(), v)) return;
     m_audioOutput->setVolume(v);
+    if (m_stateStore)
+        m_stateStore->saveSetting(QStringLiteral("volume"), qBound(0, vol, 100));
     emit volumeChanged();
 }
 
 void MusicController::setSearchSource(int source)
 {
+    source = qBound(0, source, 1);
     if (m_searchSource == source) return;
     qCInfo(logPlayer) << "Search source:" << m_searchSource << "->" << source
                       << "(" << (source == 0 ? "NetEase" : "Bilibili") << ")";
     m_searchSource = source;
-    m_searchResults.clear();
-    m_searchSongs.clear();
-    m_currentPage = 1;
-    m_totalPages = 0;
+    if (m_stateStore)
+        m_stateStore->saveSetting(QStringLiteral("currentSearchSource"), source);
     emit searchResultsChanged();
     emit pageChanged();
     emit searchSourceChanged();
@@ -127,18 +133,23 @@ void MusicController::setSearchSource(int source)
 
 void MusicController::search(const QString &keywords)
 {
-    m_currentKeywords = keywords.trimmed();
-    if (m_currentKeywords.isEmpty()) {
-        m_searchResults.clear();
-        m_searchSongs.clear();
-        m_currentPage = 1;
-        m_totalPages = 0;
+    SearchState &state = activeSearchState();
+    state.keywords = keywords.trimmed();
+    if (state.keywords.isEmpty()) {
+        state.results.clear();
+        state.songs.clear();
+        state.page = 1;
+        state.totalPages = 0;
+        saveCurrentSearchState();
+        emit currentKeywordsChanged();
         emit searchResultsChanged();
         emit pageChanged();
         showStatus(QString());
         return;
     }
-    m_currentPage = 1;
+    state.page = 1;
+    emit currentKeywordsChanged();
+    emit pageChanged();
     setSearchLoading(true);
     showStatus(QString());
     searchCurrentPage();
@@ -146,24 +157,29 @@ void MusicController::search(const QString &keywords)
 
 void MusicController::prevPage()
 {
-    if (m_currentKeywords.isEmpty() || m_totalPages <= 0 || m_currentPage <= 1) return;
-    m_currentPage--;
+    SearchState &state = activeSearchState();
+    if (state.keywords.isEmpty() || state.totalPages <= 0 || state.page <= 1) return;
+    state.page--;
+    emit pageChanged();
     setSearchLoading(true);
     searchCurrentPage();
 }
 
 void MusicController::nextPage()
 {
-    if (m_currentKeywords.isEmpty() || m_totalPages <= 0 || m_currentPage >= m_totalPages) return;
-    m_currentPage++;
+    SearchState &state = activeSearchState();
+    if (state.keywords.isEmpty() || state.totalPages <= 0 || state.page >= state.totalPages) return;
+    state.page++;
+    emit pageChanged();
     setSearchLoading(true);
     searchCurrentPage();
 }
 
 void MusicController::playSongAt(int index)
 {
-    if (index < 0 || index >= m_searchSongs.size()) return;
-    const Song &clicked = m_searchSongs.at(index);
+    SearchState &state = activeSearchState();
+    if (index < 0 || index >= state.songs.size()) return;
+    const Song &clicked = state.songs.at(index);
 
     bool isSame = (clicked.source == SearchSource::NetEase && clicked.id == m_currentPlayingSongId) ||
                   (clicked.source == SearchSource::Bilibili && clicked.bvid == m_currentBvid);
@@ -172,8 +188,9 @@ void MusicController::playSongAt(int index)
         return; // already playing, just stay on player view
     }
 
-    m_playlist->addSongs(m_searchSongs);
+    m_playlist->addSongs(state.songs);
     m_playlist->setCurrentIndex(index);
+    savePlaybackState();
     emit hasMediaChanged();
 
     Song cur = m_playlist->getCurrentSong();
@@ -187,6 +204,13 @@ void MusicController::playPause()
 {
     if (m_playbackLoading) return;
     if (!hasMedia()) return;
+    if (!m_player->source().isValid()) {
+        if (!m_currentBvid.isEmpty())
+            playBilibiliVideo(m_currentBvid);
+        else if (m_currentPlayingSongId != -1)
+            playSong(m_currentPlayingSongId);
+        return;
+    }
     if (m_player->playbackState() == QMediaPlayer::PlayingState)
         m_player->pause();
     else
@@ -197,6 +221,7 @@ void MusicController::playNext()
 {
     if (m_playbackLoading || m_playlist->isEmpty()) return;
     Song next = m_playlist->getNextSong();
+    savePlaybackState();
     if (next.source == SearchSource::Bilibili && !next.bvid.isEmpty())
         playBilibiliVideo(next.bvid);
     else if (next.id != -1)
@@ -207,6 +232,7 @@ void MusicController::playPrev()
 {
     if (m_playbackLoading || m_playlist->isEmpty()) return;
     Song prev = m_playlist->getPreviousSong();
+    savePlaybackState();
     if (prev.source == SearchSource::Bilibili && !prev.bvid.isEmpty())
         playBilibiliVideo(prev.bvid);
     else if (prev.id != -1)
@@ -217,6 +243,7 @@ void MusicController::cyclePlayMode()
 {
     int next = (static_cast<int>(m_playlist->getPlayMode()) + 1) % 3;
     m_playlist->setPlayMode(static_cast<PlaylistManager::PlayMode>(next));
+    savePlaybackState();
     emit playModeChanged();
 }
 
@@ -234,6 +261,8 @@ void MusicController::selectAudioDevice(int index)
         m_userSelectedDevice = true;
         m_selectedDeviceId = id;
         m_currentAudioDeviceIndex = index;
+        if (m_stateStore)
+            m_stateStore->saveSetting(QStringLiteral("selectedAudioDeviceId"), QString::fromLatin1(id.toBase64()));
         qCInfo(logPlayer).noquote() << "Audio device selected: index" << index
                                     << "|" << m_audioDevices.at(index).toMap().value("name").toString();
         emit audioDevicesChanged();
@@ -265,10 +294,115 @@ QString MusicController::formatTime(qint64 ms) const
 
 void MusicController::searchCurrentPage()
 {
+    const SearchState &state = activeSearchState();
     if (m_searchSource == 0)
-        m_api->searchSongs(m_currentKeywords, 15, (m_currentPage - 1) * 15);
+        m_api->searchSongs(state.keywords, 15, (state.page - 1) * 15);
     else
-        m_api->searchBilibiliVideos(m_currentKeywords, m_currentPage);
+        m_api->searchBilibiliVideos(state.keywords, state.page);
+}
+
+void MusicController::loadPersistedState()
+{
+    if (!m_stateStore || !m_stateStore->open()) return;
+
+    QVariantMap settings = m_stateStore->loadSettings();
+
+    for (int i = 0; i < 2; ++i) {
+        SearchStateRecord record = m_stateStore->loadSearchState(static_cast<SearchSource>(i));
+        SearchState &state = m_searchStates[i];
+        state.keywords = record.keywords;
+        state.page = record.page;
+        state.totalPages = record.totalPages;
+        state.songs = record.songs;
+        state.results.clear();
+        for (const Song &song : state.songs)
+            state.results.append(songToResultItem(song));
+    }
+
+    m_searchSource = qBound(0, settings.value(QStringLiteral("currentSearchSource"), 0).toInt(), 1);
+
+    if (settings.contains(QStringLiteral("volume"))) {
+        int vol = qBound(0, settings.value(QStringLiteral("volume")).toInt(), 100);
+        m_audioOutput->setVolume(vol / 100.0f);
+    }
+
+    QByteArray deviceId = QByteArray::fromBase64(settings.value(QStringLiteral("selectedAudioDeviceId")).toString().toLatin1());
+    if (!deviceId.isEmpty() && applyAudioDevice(deviceId)) {
+        m_userSelectedDevice = true;
+        m_selectedDeviceId = deviceId;
+        refreshAudioDevices();
+    }
+
+    int currentIndex = -1;
+    int playMode = 0;
+    QVector<Song> queue = m_stateStore->loadQueue(&currentIndex, &playMode);
+    m_playlist->restoreSongs(queue, currentIndex);
+    m_playlist->setPlayMode(static_cast<PlaylistManager::PlayMode>(qBound(0, playMode, 2)));
+    Song current = m_playlist->getCurrentSong();
+    if (current.source == SearchSource::Bilibili ? !current.bvid.isEmpty() : current.id != -1)
+        restoreCurrentSongInfo(current);
+}
+
+void MusicController::saveCurrentSearchState()
+{
+    if (!m_stateStore) return;
+    const SearchState &state = activeSearchState();
+    m_stateStore->saveSearchState(currentSearchSource(), state.keywords, state.page, state.totalPages, state.songs);
+}
+
+void MusicController::savePlaybackState()
+{
+    if (!m_stateStore) return;
+    m_stateStore->saveQueue(m_playlist->songs(), m_playlist->getCurrentIndex(), static_cast<int>(m_playlist->getPlayMode()));
+}
+
+void MusicController::restoreCurrentSongInfo(const Song &song)
+{
+    m_currentSongName = song.name;
+    m_currentArtist = song.artist;
+    if (song.source == SearchSource::Bilibili) {
+        m_currentBvid = song.bvid;
+        m_currentPlayingSongId = -1;
+        m_currentLyric = tr("Bilibili 视频 · 无歌词");
+        if (!song.picUrl.isEmpty())
+            m_albumArtUrl = QUrl(song.picUrl);
+    } else {
+        m_currentPlayingSongId = song.id;
+        m_currentBvid.clear();
+        m_currentLyric.clear();
+    }
+    emit currentSongChanged();
+    emit lyricChanged();
+    emit albumArtChanged();
+    emit hasMediaChanged();
+}
+
+SearchSource MusicController::currentSearchSource() const
+{
+    return m_searchSource == 1 ? SearchSource::Bilibili : SearchSource::NetEase;
+}
+
+MusicController::SearchState &MusicController::activeSearchState()
+{
+    return m_searchStates[m_searchSource == 1 ? 1 : 0];
+}
+
+const MusicController::SearchState &MusicController::activeSearchState() const
+{
+    return m_searchStates[m_searchSource == 1 ? 1 : 0];
+}
+
+QVariantMap MusicController::songToResultItem(const Song &song)
+{
+    QVariantMap item;
+    item["title"] = song.name;
+    item["artist"] = song.artist;
+    item["source"] = static_cast<int>(song.source);
+    if (song.source == SearchSource::Bilibili)
+        item["bvid"] = song.bvid;
+    else
+        item["id"] = song.id;
+    return item;
 }
 
 void MusicController::setPlaybackLoading(bool loading)
@@ -501,11 +635,12 @@ void MusicController::onSearchFinished(const QJsonDocument &json, const QString 
 {
     Q_UNUSED(limit)
     int page = offset / 15 + 1;
-    if (m_searchSource != 0 || keywords != m_currentKeywords || page != m_currentPage) return;
+    SearchState &state = m_searchStates[0];
+    if (m_searchSource != 0 || keywords != state.keywords || page != state.page) return;
 
     setSearchLoading(false);
-    m_searchResults.clear();
-    m_searchSongs.clear();
+    state.results.clear();
+    state.songs.clear();
 
     QJsonObject root = json.object();
     int total = 0;
@@ -513,7 +648,7 @@ void MusicController::onSearchFinished(const QJsonDocument &json, const QString 
         QJsonObject res = root["result"].toObject();
         total = res["songCount"].toInt();
         QJsonArray songs = res["songs"].toArray();
-        if (songs.isEmpty() && m_currentPage == 1) showStatus(tr("未找到相关歌曲。"));
+        if (songs.isEmpty() && state.page == 1) showStatus(tr("未找到相关歌曲。"));
         for (const QJsonValue &v : songs) {
             QJsonObject obj = v.toObject();
             QString name = obj["name"].toString();
@@ -522,28 +657,24 @@ void MusicController::onSearchFinished(const QJsonDocument &json, const QString 
                 artist = obj["artists"].toArray()[0].toObject()["name"].toString();
             qint64 id = obj["id"].toVariant().toLongLong();
 
-            QVariantMap item;
-            item["title"] = name;
-            item["artist"] = artist;
-            item["id"] = id;
-            item["source"] = 0;
-            m_searchResults.append(item);
-
             Song s; s.id=id; s.name=name; s.artist=artist; s.source=SearchSource::NetEase;
-            m_searchSongs.append(s);
+            state.songs.append(s);
+            state.results.append(songToResultItem(s));
         }
     }
-    m_totalPages = total > 0 ? (total + 14) / 15 : 0;
+    state.totalPages = total > 0 ? (total + 14) / 15 : 0;
+    saveCurrentSearchState();
     emit searchResultsChanged();
     emit pageChanged();
 }
 
 void MusicController::onBilibiliSearchFinished(const QJsonDocument &json, const QString &keywords, int page)
 {
-    if (m_searchSource != 1 || keywords != m_currentKeywords || page != m_currentPage) return;
+    SearchState &state = m_searchStates[1];
+    if (m_searchSource != 1 || keywords != state.keywords || page != state.page) return;
     setSearchLoading(false);
-    m_searchResults.clear();
-    m_searchSongs.clear();
+    state.results.clear();
+    state.songs.clear();
 
     QJsonObject root = json.object();
     if (root.value("code").toInt() != 0) {
@@ -553,7 +684,7 @@ void MusicController::onBilibiliSearchFinished(const QJsonDocument &json, const 
     QJsonObject data = root.value("data").toObject();
     int total = data.value("numResults").toInt();
     QJsonArray videos = data.value("result").toObject().value("video").toArray();
-    if (videos.isEmpty() && m_currentPage == 1) showStatus(tr("未找到相关视频。"));
+    if (videos.isEmpty() && state.page == 1) showStatus(tr("未找到相关视频。"));
 
     for (const QJsonValue &v : videos) {
         QJsonObject obj = v.toObject();
@@ -564,17 +695,12 @@ void MusicController::onBilibiliSearchFinished(const QJsonDocument &json, const 
         QString pic = obj["pic"].toString();
         if (!pic.startsWith("http")) pic = "https:" + pic;
 
-        QVariantMap item;
-        item["title"] = title;
-        item["artist"] = author;
-        item["bvid"] = bvid;
-        item["source"] = 1;
-        m_searchResults.append(item);
-
         Song s; s.bvid=bvid; s.name=title; s.artist=author; s.picUrl=pic; s.source=SearchSource::Bilibili;
-        m_searchSongs.append(s);
+        state.songs.append(s);
+        state.results.append(songToResultItem(s));
     }
-    m_totalPages = total > 0 ? (total + 19) / 20 : 0;
+    state.totalPages = total > 0 ? (total + 19) / 20 : 0;
+    saveCurrentSearchState();
     emit searchResultsChanged();
     emit pageChanged();
 }

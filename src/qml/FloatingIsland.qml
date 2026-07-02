@@ -21,6 +21,8 @@ Window {
 
     onVisibleChanged: {
         if (visible) {
+            x = (Screen.width - width) / 2
+            y = 10
             _dragging = false
         }
     }
@@ -116,7 +118,7 @@ Window {
         MouseArea {
             anchors.fill: parent
             z: -1 // Render behind control buttons
-            cursorShape: Qt.SizeAllCursor
+            cursorShape: Qt.ArrowCursor
             onPressed: (mouse) => {
                 island._dragStart = Qt.point(mouse.x, mouse.y)
                 island._dragging = true

@@ -14,9 +14,11 @@
 #include <QVariantMap>
 #include <QUrl>
 #include <QVector>
+#include <memory>
 #include "playlistmanager.h"
 
 class ApiManager;
+class AppStateStore;
 
 class MusicController : public QObject
 {
@@ -44,6 +46,7 @@ class MusicController : public QObject
     Q_PROPERTY(QString statusMessage READ statusMessage NOTIFY statusMessageChanged)
     Q_PROPERTY(bool statusIsError READ statusIsError NOTIFY statusMessageChanged)
     Q_PROPERTY(int searchSource READ searchSource WRITE setSearchSource NOTIFY searchSourceChanged)
+    Q_PROPERTY(QString currentKeywords READ currentKeywords NOTIFY currentKeywordsChanged)
 
     // ---- 播放模式 ----
     Q_PROPERTY(int playMode READ playMode NOTIFY playModeChanged)
@@ -81,6 +84,7 @@ public:
     QString statusMessage() const;
     bool statusIsError() const;
     int searchSource() const;
+    QString currentKeywords() const;
     int playMode() const;
     QVariantList audioDevices() const;
     int currentAudioDeviceIndex() const;
@@ -122,6 +126,7 @@ signals:
     void searchLoadingChanged();
     void statusMessageChanged();
     void searchSourceChanged();
+    void currentKeywordsChanged();
     void playModeChanged();
     void audioDevicesChanged();
     void paletteColorsChanged();
@@ -150,6 +155,14 @@ private slots:
     void onAudioOutputsChanged();
 
 private:
+    struct SearchState {
+        QVariantList results;
+        QVector<Song> songs;
+        QString keywords;
+        int page = 1;
+        int totalPages = 0;
+    };
+
     void playSong(qint64 id);
     void playBilibiliVideo(const QString &bvid);
     void setPlaybackLoading(bool loading);
@@ -162,6 +175,14 @@ private:
     void parseLyrics(const QString &lyricText);
     void updateCurrentLyric(qint64 positionMs);
     QVariantList extractPaletteColors(const QImage &image, int count = 3);
+    void loadPersistedState();
+    void saveCurrentSearchState();
+    void savePlaybackState();
+    void restoreCurrentSongInfo(const Song &song);
+    SearchSource currentSearchSource() const;
+    SearchState &activeSearchState();
+    const SearchState &activeSearchState() const;
+    static QVariantMap songToResultItem(const Song &song);
 
     // Media
     QMediaPlayer *m_player;
@@ -189,12 +210,9 @@ private:
     bool m_statusIsError = false;
 
     // Search state
-    QVariantList m_searchResults;
-    QVector<Song> m_searchSongs;
-    QString m_currentKeywords;
-    int m_currentPage = 1;
-    int m_totalPages = 0;
+    SearchState m_searchStates[2];
     int m_searchSource = 0; // 0=NetEase, 1=Bilibili
+    std::unique_ptr<AppStateStore> m_stateStore;
 
     // Bilibili state
     QVariantList m_bilibiliPages;

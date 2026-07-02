@@ -45,6 +45,8 @@ public:
     void addSongs(const QVector<Song> &songs);
     void setCurrentIndex(int index);
     void setPlayMode(PlayMode mode);
+    QVector<Song> songs() const;
+    void restoreSongs(const QVector<Song> &songs, int index);
 
     Song getNextSong(bool isAutoTriggered = true); // isAutoTriggered 用于区分是自动播放下一首还是手动点击
     Song getPreviousSong();
