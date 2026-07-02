@@ -2,7 +2,6 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
-import QtQuick.Effects
 import Qt.labs.platform 1.1
 import Melody
 
@@ -109,16 +108,6 @@ Window {
         color: Theme.surfaceBase
         clip: true
 
-        // Real elevation: soft drop shadow so the frameless window reads as floating.
-        layer.enabled: true
-        layer.effect: MultiEffect {
-            shadowEnabled: true
-            shadowColor: Qt.rgba(0,0,0,0.45)
-            shadowBlur: 0.5
-            shadowVerticalOffset: 6
-            shadowHorizontalOffset: 0
-        }
-
         // ── Animated flowing background ───────────────────────────
         FlowingBackground {
             id: flowBg
@@ -129,6 +118,7 @@ Window {
         // Dark overlay for readability
         Rectangle {
             anchors.fill: parent
+            radius: Theme.radiusSm
             gradient: Gradient {
                 orientation: Gradient.Vertical
                 GradientStop { position: 0.0; color: "transparent" }

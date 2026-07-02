@@ -15,7 +15,6 @@ Item {
     // Drag area (whole bar)
     MouseArea {
         anchors.fill: parent
-        cursorShape: Qt.SizeAllCursor
         onPressed: (mouse) => root.dragStarted(Qt.point(mouse.x, mouse.y))
         onPositionChanged: (mouse) => root.dragging(Qt.point(mouse.x, mouse.y))
         onReleased: root.dragEnded()
