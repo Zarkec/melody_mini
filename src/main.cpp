@@ -4,28 +4,13 @@
 #include <QQuickStyle>
 #include <QIcon>
 #include <QSurfaceFormat>
-#include <QFile>
-#include <QTextStream>
 #include <QFontDatabase>
 #include <QFont>
+#include "core/logger.h"
 #include "core/musiccontroller.h"
-
-static QFile *g_logFile = nullptr;
-static void messageHandler(QtMsgType type, const QMessageLogContext &ctx, const QString &msg)
-{
-    Q_UNUSED(type); Q_UNUSED(ctx);
-    if (g_logFile && g_logFile->isOpen()) {
-        QTextStream(g_logFile) << msg << "\n";
-        g_logFile->flush();
-    }
-}
 
 int main(int argc, char *argv[])
 {
-    g_logFile = new QFile("melody_debug.log");
-    g_logFile->open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text);
-    qInstallMessageHandler(messageHandler);
-
     // Enable window alpha buffer for transparent/rounded corners
     QSurfaceFormat format;
     format.setAlphaBufferSize(8);
@@ -38,6 +23,10 @@ int main(int argc, char *argv[])
     app.setWindowIcon(QIcon(":/logo.png"));
     app.setApplicationName("Melody");
     app.setOrganizationName("Melody");
+
+    // 日志系统必须在 applicationName/organizationName 设置之后初始化，
+    // 以便 QStandardPaths::AppDataLocation 解析到正确的目录。
+    initLogging();
 
     // Font loading: JetBrains Mono (base) + HarmonyOS Sans SC (CJK fallback) + codicons.
     // Reference: ImZiv (ImGui) uses ImFont merge mode; Qt equivalent is insertSubstitution.
@@ -75,7 +64,6 @@ int main(int argc, char *argv[])
     engine.load(url);
 
     int ret = app.exec();
-    if (g_logFile) { g_logFile->close(); delete g_logFile; }
+    closeLogging();
     return ret;
 }
-

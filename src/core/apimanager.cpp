@@ -5,8 +5,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
-#include <QDebug>
 #include <QTemporaryFile>
+#include "logger.h"
 
 ApiManager::ApiManager(QObject *parent)
     : QObject{parent}
@@ -94,6 +94,7 @@ void ApiManager::getSongUrl(qint64 songId)
 void ApiManager::onSearchReplyFinished(QNetworkReply *reply)
 {
     if (reply->error() != QNetworkReply::NoError) {
+        qCWarning(logApi) << "NetEase search failed:" << reply->errorString();
         emit error(reply->errorString());
     } else {
         emit searchFinished(QJsonDocument::fromJson(reply->readAll()),
@@ -107,6 +108,7 @@ void ApiManager::onSearchReplyFinished(QNetworkReply *reply)
 void ApiManager::onLyricReplyFinished(QNetworkReply *reply)
 {
     if (reply->error() != QNetworkReply::NoError) {
+        qCWarning(logApi) << "NetEase lyric failed:" << reply->errorString();
         emit error(reply->errorString());
     } else {
         emit lyricFinished(QJsonDocument::fromJson(reply->readAll()),
@@ -118,6 +120,7 @@ void ApiManager::onLyricReplyFinished(QNetworkReply *reply)
 void ApiManager::onSongDetailReplyFinished(QNetworkReply *reply)
 {
     if (reply->error() != QNetworkReply::NoError) {
+        qCWarning(logApi) << "NetEase song detail failed:" << reply->errorString();
         emit error(reply->errorString());
     } else {
         emit songDetailFinished(QJsonDocument::fromJson(reply->readAll()),
@@ -129,6 +132,7 @@ void ApiManager::onSongDetailReplyFinished(QNetworkReply *reply)
 void ApiManager::onImageReplyFinished(QNetworkReply *reply)
 {
     if (reply->error() != QNetworkReply::NoError) {
+        qCWarning(logApi) << "Image download failed:" << reply->errorString();
         emit error(reply->errorString());
     } else {
         emit imageDownloaded(reply->readAll(), reply->property("url").toUrl());
@@ -139,6 +143,7 @@ void ApiManager::onImageReplyFinished(QNetworkReply *reply)
 void ApiManager::onSongUrlReplyFinished(QNetworkReply *reply)
 {
     if (reply->error() != QNetworkReply::NoError) {
+        qCWarning(logApi) << "NetEase songUrl failed:" << reply->errorString();
         emit error(reply->errorString());
     } else {
         QByteArray responseData = reply->readAll();
@@ -146,6 +151,8 @@ void ApiManager::onSongUrlReplyFinished(QNetworkReply *reply)
         if (!onlineUrl.isEmpty()) {
             emit songUrlReady(QUrl(onlineUrl), reply->property("songId").toLongLong());
         } else {
+            qCWarning(logApi) << "NetEase songUrl: empty body for songId"
+                              << reply->property("songId").toLongLong();
             emit error("无法解析歌曲链接");
         }
     }
@@ -164,7 +171,7 @@ void ApiManager::searchBilibiliVideos(const QString &keywords, int page)
     query.addQueryItem("pagesize", "20");
     url.setQuery(query);
 
-    qDebug() << "Bilibili search URL:" << url.toString();
+    qCDebug(logApi) << "Bilibili search:" << keywords << "page" << page << "->" << url.toString();
 
     QNetworkRequest request(url);
     setBilibiliHeaders(request);
@@ -220,8 +227,8 @@ void ApiManager::onBilibiliSearchReplyFinished(QNetworkReply *reply)
 {
     if (reply->error() != QNetworkReply::NoError) {
         int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        qDebug() << "Bilibili search network error:" << reply->errorString();
-        qDebug() << "HTTP status code:" << httpStatus;
+        qCWarning(logApi).noquote() << "Bilibili search network error:" << reply->errorString()
+                                    << "| HTTP" << httpStatus;
 
         // 如果是412错误（Precondition Failed），可能是被限制了
         if (httpStatus == 412) {
@@ -231,8 +238,8 @@ void ApiManager::onBilibiliSearchReplyFinished(QNetworkReply *reply)
         }
     } else {
         QByteArray data = reply->readAll();
-        qDebug() << "Bilibili search response size:" << data.size();
-        qDebug() << "Bilibili search response preview:" << data.left(500);
+        qCDebug(logApi) << "Bilibili search response size:" << data.size();
+        qCDebug(logApi).noquote() << "Bilibili search response preview:" << data.left(500);
         emit bilibiliSearchFinished(QJsonDocument::fromJson(data),
                                     reply->property("keywords").toString(),
                                     reply->property("page").toInt());
@@ -243,6 +250,7 @@ void ApiManager::onBilibiliSearchReplyFinished(QNetworkReply *reply)
 void ApiManager::onBilibiliVideoInfoReplyFinished(QNetworkReply *reply)
 {
     if (reply->error() != QNetworkReply::NoError) {
+        qCWarning(logApi) << "Bilibili videoInfo failed:" << reply->errorString();
         emit error("获取Bilibili视频信息失败: " + reply->errorString());
     } else {
         emit bilibiliVideoInfoFinished(QJsonDocument::fromJson(reply->readAll()),
@@ -254,12 +262,14 @@ void ApiManager::onBilibiliVideoInfoReplyFinished(QNetworkReply *reply)
 void ApiManager::onBilibiliAudioUrlReplyFinished(QNetworkReply *reply)
 {
     if (reply->error() != QNetworkReply::NoError) {
+        qCWarning(logApi) << "Bilibili audioUrl failed:" << reply->errorString();
         emit error("获取Bilibili音频地址失败: " + reply->errorString());
     } else {
         QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
         QJsonObject rootObj = doc.object();
 
         if (rootObj.value("code").toInt() != 0) {
+            qCWarning(logApi) << "Bilibili API error:" << rootObj.value("message").toString();
             emit error("Bilibili API错误: " + rootObj.value("message").toString());
             reply->deleteLater();
             return;
@@ -304,12 +314,12 @@ void ApiManager::onBilibiliAudioUrlReplyFinished(QNetworkReply *reply)
         }
 
         if (!audioUrl.isEmpty()) {
-            qDebug() << "Bilibili audio URL ready:" << audioUrl.toString().left(100) << "...";
+            qCDebug(logApi).noquote() << "Bilibili audio URL ready:" << audioUrl.toString().left(100) << "...";
             emit bilibiliAudioUrlReady(audioUrl,
                                        reply->property("bvid").toString(),
                                        reply->property("cid").toLongLong());
         } else if (!backupUrl.isEmpty()) {
-            qDebug() << "Using backup Bilibili audio URL";
+            qCDebug(logApi) << "Using backup Bilibili audio URL";
             emit bilibiliAudioUrlReady(QUrl(backupUrl),
                                        reply->property("bvid").toString(),
                                        reply->property("cid").toLongLong());
@@ -323,6 +333,7 @@ void ApiManager::onBilibiliAudioUrlReplyFinished(QNetworkReply *reply)
 void ApiManager::onBilibiliImageReplyFinished(QNetworkReply *reply)
 {
     if (reply->error() != QNetworkReply::NoError) {
+        qCWarning(logApi) << "Bilibili image download failed:" << reply->errorString();
         emit error("下载Bilibili图片失败: " + reply->errorString());
     } else {
         emit bilibiliImageDownloaded(reply->readAll(), reply->property("url").toUrl());
@@ -340,6 +351,7 @@ void ApiManager::streamBilibiliAudio(const QUrl &url)
     // 创建临时文件
     QTemporaryFile *tempFile = new QTemporaryFile();
     if (!tempFile->open()) {
+        qCWarning(logApi) << "Failed to create temp file for Bilibili audio stream";
         emit error("无法创建临时文件用于音频下载");
         tempFile->deleteLater();
         reply->deleteLater();
@@ -355,6 +367,7 @@ void ApiManager::streamBilibiliAudio(const QUrl &url)
 
     connect(reply, &QNetworkReply::finished, this, [this, reply, tempFile]() {
         if (reply->error() != QNetworkReply::NoError) {
+            qCWarning(logApi) << "Bilibili stream download failed:" << reply->errorString();
             emit error("流式下载Bilibili音频失败: " + reply->errorString());
             tempFile->deleteLater();
         } else {

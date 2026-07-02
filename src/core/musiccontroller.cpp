@@ -11,8 +11,8 @@
 #include <QJsonValue>
 #include <QRegularExpression>
 #include <QFile>
-#include <QDebug>
 #include <algorithm>
+#include "logger.h"
 
 MusicController::MusicController(QObject *parent)
     : QObject(parent)
@@ -109,6 +109,8 @@ void MusicController::setVolume(int vol)
 void MusicController::setSearchSource(int source)
 {
     if (m_searchSource == source) return;
+    qCInfo(logPlayer) << "Search source:" << m_searchSource << "->" << source
+                      << "(" << (source == 0 ? "NetEase" : "Bilibili") << ")";
     m_searchSource = source;
     m_searchResults.clear();
     m_searchSongs.clear();
@@ -232,7 +234,11 @@ void MusicController::selectAudioDevice(int index)
         m_userSelectedDevice = true;
         m_selectedDeviceId = id;
         m_currentAudioDeviceIndex = index;
+        qCInfo(logPlayer).noquote() << "Audio device selected: index" << index
+                                    << "|" << m_audioDevices.at(index).toMap().value("name").toString();
         emit audioDevicesChanged();
+    } else {
+        qCWarning(logPlayer) << "Failed to apply audio device at index" << index;
     }
 }
 
@@ -407,6 +413,7 @@ QVariantList MusicController::extractPaletteColors(const QImage &image, int coun
 void MusicController::playSong(qint64 id)
 {
     if (id <= 0) return;
+    qCInfo(logPlayer) << "Play NetEase song id =" << id;
     setPlaybackLoading(true);
 
     // Reset state
@@ -449,6 +456,7 @@ void MusicController::playSong(qint64 id)
 void MusicController::playBilibiliVideo(const QString &bvid)
 {
     if (bvid.isEmpty()) return;
+    qCInfo(logPlayer).noquote() << "Play Bilibili video bvid =" << bvid;
     setPlaybackLoading(true);
 
     m_pendingCoverUrl = QUrl();
@@ -707,11 +715,13 @@ void MusicController::onBilibiliAudioFileReady(const QString &filePath)
 void MusicController::onApiError(const QString &errorString)
 {
     if (errorString.contains("mp3") && m_currentPlayingSongId != -1) {
+        qCInfo(logPlayer) << "SongUrl failed, falling back to NetEase outer url for songId" << m_currentPlayingSongId;
         QString fallback = QString("https://music.163.com/song/media/outer/url?id=%1.mp3").arg(m_currentPlayingSongId);
         m_player->setSource(QUrl(fallback));
         m_player->play();
         return;
     }
+    qCWarning(logPlayer).noquote() << "API error:" << errorString;
     setSearchLoading(false);
     setPlaybackLoading(false);
     showStatus(errorString, true);
@@ -735,6 +745,7 @@ void MusicController::onDurationChanged(qint64 /*dur*/)
 
 void MusicController::onPlaybackStateChanged(QMediaPlayer::PlaybackState state)
 {
+    qCDebug(logPlayer) << "PlaybackState:" << state;
     if (state == QMediaPlayer::PlayingState && m_playbackLoading)
         setPlaybackLoading(false);
     emit playingChanged();
@@ -742,7 +753,9 @@ void MusicController::onPlaybackStateChanged(QMediaPlayer::PlaybackState state)
 
 void MusicController::onMediaStatusChanged(QMediaPlayer::MediaStatus status)
 {
+    qCDebug(logPlayer) << "MediaStatus:" << status;
     if (status == QMediaPlayer::EndOfMedia) {
+        qCInfo(logPlayer) << "EndOfMedia -> playNext";
         m_currentPlayingSongId = -1;
         m_currentBvid.clear();
         playNext();
@@ -752,11 +765,15 @@ void MusicController::onMediaStatusChanged(QMediaPlayer::MediaStatus status)
 
 void MusicController::onMediaPlayerError(QMediaPlayer::Error error, const QString &errorString)
 {
+    qCWarning(logPlayer) << "MediaPlayer error:" << error
+                         << "|" << (errorString.isEmpty() ? QStringLiteral("(no detail)") : errorString);
+
     if (error == QMediaPlayer::ResourceError &&
         !m_currentBilibiliAudioUrl.isEmpty() &&
         !m_currentBvid.isEmpty() &&
         m_currentBilibiliAudioBvid == m_currentBvid)
     {
+        qCInfo(logPlayer) << "ResourceError on Bilibili direct stream -> fallback to download mode";
         m_player->stop();
         m_api->downloadBilibiliAudio(m_currentBilibiliAudioUrl);
         m_currentBilibiliAudioUrl.clear();
@@ -769,6 +786,7 @@ void MusicController::onMediaPlayerError(QMediaPlayer::Error error, const QStrin
 
 void MusicController::onAudioOutputsChanged()
 {
+    qCInfo(logPlayer) << "System audio outputs changed;";
     if (m_userSelectedDevice && applyAudioDevice(m_selectedDeviceId)) {
         refreshAudioDevices();
         return;

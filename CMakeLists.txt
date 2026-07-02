@@ -34,12 +34,14 @@ set(CORE_SOURCES
     ${SRC_DIR}/core/apimanager.cpp
     ${SRC_DIR}/core/playlistmanager.cpp
     ${SRC_DIR}/core/musiccontroller.cpp
+    ${SRC_DIR}/core/logger.cpp
 )
 
 set(CORE_HEADERS
     ${SRC_DIR}/core/apimanager.h
     ${SRC_DIR}/core/playlistmanager.h
     ${SRC_DIR}/core/musiccontroller.h
+    ${SRC_DIR}/core/logger.h
 )
 
 set(MAIN_SOURCES
