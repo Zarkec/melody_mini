@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
+import Melody
 
 // Player page: album art, song info, lyrics, controls
 Item {
@@ -8,15 +9,15 @@ Item {
     signal minimizeRequested()
 
     ColumnLayout {
-        anchors { fill: parent; margins: 16; topMargin: 10 }
-        spacing: 12
+        anchors { fill: parent; margins: Theme.spaceLg; topMargin: 10 }
+        spacing: Theme.spaceMd
 
         // Back button row
         RowLayout {
             Layout.fillWidth: true
             IconBtn {
                 source: "qrc:/icons/back.png"
-                width: 32; height: 32; radius: 8
+                width: 32; height: 32; radius: Theme.radiusSm
                 onClicked: root.StackView.view.pop()
             }
             Item { Layout.fillWidth: true }
@@ -36,15 +37,15 @@ Item {
                     color: Qt.rgba(1,1,1,0.08)
                     border.color: pageSelector.hovered ? Qt.rgba(1,1,1,0.18) : Qt.rgba(1,1,1,0.08)
                     border.width: 1
-                    radius: 8
+                    radius: Theme.radiusSm
                 }
 
                 contentItem: Text {
                     leftPadding: 10
                     rightPadding: 24
                     text: pageSelector.displayText
-                    color: "white"
-                    font { pixelSize: 11 }
+                    color: Theme.textPrimary
+                    font { pixelSize: 11; family: Theme.fontMain }
                     verticalAlignment: Text.AlignVCenter
                     elide: Text.ElideRight
                 }
@@ -80,6 +81,9 @@ Item {
                     implicitHeight: contentItem.implicitHeight
                     padding: 1
 
+                    enter: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durSlow; easing.type: Easing.OutCubic } }
+                    exit: Transition { NumberAnimation { property: "opacity"; from: 1; to: 0; duration: Theme.durFast; easing.type: Easing.OutCubic } }
+
                     contentItem: ListView {
                         clip: true
                         implicitHeight: contentHeight > 200 ? 200 : contentHeight
@@ -90,9 +94,9 @@ Item {
                     }
 
                     background: Rectangle {
-                        color: "#1e1e24"
+                        color: Theme.surfacePopup
                         border.color: Qt.rgba(1,1,1,0.1)
-                        radius: 8
+                        radius: Theme.radiusSm
                     }
                 }
 
@@ -101,14 +105,14 @@ Item {
                     height: 28
                     contentItem: Text {
                         text: modelData.label || ""
-                        color: highlighted ? "white" : Qt.rgba(1,1,1,0.7)
-                        font { pixelSize: 11 }
+                        color: highlighted ? Theme.textPrimary : Theme.textTertiary
+                        font { pixelSize: 11; family: Theme.fontMain }
                         elide: Text.ElideRight
                         verticalAlignment: Text.AlignVCenter
                     }
                     background: Rectangle {
-                        color: highlighted ? Qt.rgba(1,1,1,0.1) : "transparent"
-                        radius: 6
+                        color: highlighted ? Theme.overlay10 : "transparent"
+                        radius: Theme.radiusXs
                     }
                     padding: 6
                 }
@@ -122,31 +126,69 @@ Item {
             Layout.preferredHeight: 200
 
             Rectangle {
+                id: coverRect
                 anchors.fill: parent
-                radius: 12
-                color: Qt.rgba(1,1,1,0.06) // fallback background
+                radius: Theme.radiusMd
+                color: Theme.overlay06
                 clip: true
 
+                // Double-image crossfade on cover change. The dead
+                // "Behavior on source" cannot crossfade; this does.
                 Image {
-                    id: artImg
+                    id: artImgA
                     anchors.fill: parent
-                    source: controller.albumArtUrl
                     fillMode: Image.PreserveAspectCrop
                     smooth: true
-                    asynchronous: true // asynchronous loading!
+                    asynchronous: true
+                    opacity: 1
+                    Behavior on opacity { NumberAnimation { duration: Theme.durPage; easing.type: Easing.OutCubic } }
+                }
+                Image {
+                    id: artImgB
+                    anchors.fill: parent
+                    fillMode: Image.PreserveAspectCrop
+                    smooth: true
+                    asynchronous: true
+                    opacity: 0
+                    Behavior on opacity { NumberAnimation { duration: Theme.durPage; easing.type: Easing.OutCubic } }
+                }
 
-                    Behavior on source { PropertyAnimation { duration: 400 } }
+                property bool _useA: true
+                function updateCover(url) {
+                    if (_useA) {
+                        artImgA.source = url
+                        artImgA.opacity = 1
+                        artImgB.opacity = 0
+                    } else {
+                        artImgB.source = url
+                        artImgB.opacity = 1
+                        artImgA.opacity = 0
+                    }
+                    _useA = !_useA
+                }
+
+                Component.onCompleted: coverRect.updateCover(controller.albumArtUrl)
+                Connections {
+                    target: controller
+                    function onAlbumArtChanged() {
+                        coverRect.updateCover(controller.albumArtUrl)
+                    }
                 }
 
                 // Placeholder when no cover
                 Column {
                     anchors.centerIn: parent
-                    spacing: 8
+                    spacing: Theme.spaceSm
                     visible: controller.albumArtUrl == ""
-                    Text { text: "♪"; font.pixelSize: 50; color: Qt.rgba(1,1,1,0.3); anchors.horizontalCenter: parent.horizontalCenter }
+                    Text {
+                        text: "♪"
+                        font { pixelSize: 50; family: Theme.fontMain }
+                        color: Qt.rgba(1,1,1,0.3)
+                        anchors.horizontalCenter: parent.horizontalCenter
+                    }
                     Text {
                         text: "暂无封面"
-                        font.pixelSize: 12
+                        font { pixelSize: 12; family: Theme.fontMain }
                         color: Qt.rgba(1,1,1,0.25)
                         anchors.horizontalCenter: parent.horizontalCenter
                     }
@@ -162,16 +204,16 @@ Item {
             Text {
                 width: parent.width
                 text: controller.currentSongName || "未在播放"
-                color: "white"
-                font { pixelSize: 18; bold: true }
+                color: Theme.textPrimary
+                font { pixelSize: 18; bold: true; family: Theme.fontMain }
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignHCenter
             }
             Text {
                 width: parent.width
                 text: controller.currentArtist || ""
-                color: Qt.rgba(1,1,1,0.55)
-                font { pixelSize: 13 }
+                color: Theme.textSecondary
+                font { pixelSize: 13; family: Theme.fontMain }
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignHCenter
             }
@@ -182,7 +224,7 @@ Item {
             Layout.fillWidth: true
             text: controller.currentLyric || "欢迎使用 Melody"
             color: Qt.rgba(1,1,1,0.60)
-            font { pixelSize: 13 }
+            font { pixelSize: 13; family: Theme.fontMain }
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
             Layout.maximumHeight: 40
@@ -224,8 +266,8 @@ Item {
                         radius: 2
                         gradient: Gradient {
                             orientation: Gradient.Horizontal
-                            GradientStop { position: 0; color: "#d1d5db" }
-                            GradientStop { position: 1; color: "#9ca3af" }
+                            GradientStop { position: 0; color: Theme.accentLight }
+                            GradientStop { position: 1; color: Theme.accentDark }
                         }
                     }
                 }
@@ -235,7 +277,7 @@ Item {
                     y: progressSlider.topPadding + progressSlider.availableHeight / 2 - height / 2
                     width: 14; height: 14
                     radius: 7
-                    color: "white"
+                    color: Theme.textPrimary
                     opacity: progressSlider.pressed || progressSlider.hovered ? 1 : 0.85
                     Behavior on opacity { NumberAnimation { duration: 150 } }
                 }
@@ -243,9 +285,9 @@ Item {
 
             RowLayout {
                 width: parent.width
-                Text { text: controller.formatTime(controller.position); color: Qt.rgba(1,1,1,0.5); font { pixelSize: 11 } }
+                Text { text: controller.formatTime(controller.position); color: Qt.rgba(1,1,1,0.5); font { pixelSize: 11; family: Theme.fontMain } }
                 Item { Layout.fillWidth: true }
-                Text { text: controller.formatTime(controller.duration); color: Qt.rgba(1,1,1,0.5); font { pixelSize: 11 } }
+                Text { text: controller.formatTime(controller.duration); color: Qt.rgba(1,1,1,0.5); font { pixelSize: 11; family: Theme.fontMain } }
             }
         }
 
@@ -271,7 +313,7 @@ Item {
                         if (controller.playMode === 2) return "qrc:/icons/shuffle.png"
                         return "qrc:/icons/loop-list.png"
                     }
-                    width: 36; height: 36; radius: 8
+                    width: 36; height: 36; radius: Theme.radiusSm
                     tooltip: ["顺序","单曲循环","随机"][controller.playMode] || ""
                     onClicked: controller.cyclePlayMode()
                 }
@@ -281,7 +323,7 @@ Item {
 
             // Middle playback control group
             RowLayout {
-                spacing: 12
+                spacing: Theme.spaceMd
                 Layout.alignment: Qt.AlignHCenter
 
                 IconBtn {
@@ -298,10 +340,17 @@ Item {
                     Layout.preferredHeight: 56
 
                     Rectangle {
+                        id: bigPlayBtn
                         anchors.fill: parent
                         radius: 28
-                        color: Qt.rgba(1,1,1,0.15)
-                        Behavior on color { ColorAnimation { duration: 150 } }
+                        property bool hovered: false
+                        property bool pressed: false
+                        color: pressed ? Theme.overlay18
+                             : hovered ? Theme.overlay12
+                             : Qt.rgba(1,1,1,0.15)
+                        scale: pressed ? 0.96 : 1.0
+                        Behavior on color { ColorAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
+                        Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutCubic } }
 
                         // Premium native QML loader (with transparent background)
                         Canvas {
@@ -314,18 +363,18 @@ Item {
                             onPaint: {
                                 var ctx = getContext("2d")
                                 ctx.clearRect(0, 0, width, height)
-                                
+
                                 // Faint background ring
                                 ctx.beginPath()
                                 ctx.arc(width/2, height/2, width/2 - 2.5, 0, 2*Math.PI)
                                 ctx.strokeStyle = Qt.rgba(1, 1, 1, 0.12)
                                 ctx.lineWidth = 2.5
                                 ctx.stroke()
-                                
+
                                 // Active spinning arc
                                 ctx.beginPath()
                                 ctx.arc(width/2, height/2, width/2 - 2.5, 0, 1.5*Math.PI)
-                                ctx.strokeStyle = "#d1d5db"
+                                ctx.strokeStyle = Theme.accentLight
                                 ctx.lineWidth = 2.5
                                 ctx.stroke()
                             }
@@ -348,9 +397,13 @@ Item {
 
                         MouseArea {
                             anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onEntered: bigPlayBtn.hovered = true
+                            onExited: { bigPlayBtn.hovered = false; bigPlayBtn.pressed = false }
+                            onPressed: bigPlayBtn.pressed = true
+                            onReleased: bigPlayBtn.pressed = false
                             onClicked: controller.playPause()
-                            onPressed: parent.color = Qt.rgba(1,1,1,0.25)
-                            onReleased: parent.color = Qt.rgba(1,1,1,0.15)
                         }
                     }
                 }
@@ -375,12 +428,12 @@ Item {
                 Row {
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 8
+                    spacing: Theme.spaceSm
 
                     // Mini mode button
                     IconBtn {
                         source: "qrc:/icons/minimize.png"
-                        width: 36; height: 36; radius: 8
+                        width: 36; height: 36; radius: Theme.radiusSm
                         tooltip: "迷你模式"
                         onClicked: root.minimizeRequested()
                     }
@@ -395,7 +448,7 @@ Item {
                             if (v < 70)  return "qrc:/icons/volume-medium.png"
                             return "qrc:/icons/volume-high.png"
                         }
-                        width: 36; height: 36; radius: 8
+                        width: 36; height: 36; radius: Theme.radiusSm
                         onClicked: volumePopup.visible = !volumePopup.visible
                     }
                 }
@@ -414,19 +467,25 @@ Item {
         anchors { right: parent.right; rightMargin: 14; bottom: parent.bottom; bottomMargin: 80 }
         z: 10
 
+        // Fade in/out instead of instant visibility toggle.
+        opacity: visible ? 1 : 0
+        scale: visible ? 1 : 0.98
+        Behavior on opacity { NumberAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
+        Behavior on scale { NumberAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
+
         // Swallow mouse clicks to prevent closing the popup, placed behind Column
         MouseArea {
             anchors.fill: parent
         }
 
         Column {
-            anchors { fill: parent; margins: 12 }
+            anchors { fill: parent; margins: Theme.spaceMd }
             spacing: 10
 
             Text {
                 text: "输出设备"
                 color: Qt.rgba(1,1,1,0.5)
-                font { pixelSize: 10 }
+                font { pixelSize: 10; family: Theme.fontMain }
             }
 
             ListView {
@@ -437,18 +496,18 @@ Item {
                 delegate: Text {
                     width: parent ? parent.width : 0
                     text: modelData.name || ""
-                    color: index === controller.currentAudioDeviceIndex ? "white" : Qt.rgba(1,1,1,0.45)
-                    font { pixelSize: 11; bold: index === controller.currentAudioDeviceIndex }
+                    color: index === controller.currentAudioDeviceIndex ? Theme.textPrimary : Qt.rgba(1,1,1,0.45)
+                    font { pixelSize: 11; bold: index === controller.currentAudioDeviceIndex; family: Theme.fontMain }
                     elide: Text.ElideRight
                     height: 22
-                    MouseArea { anchors.fill: parent; onClicked: controller.selectAudioDevice(index) }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: controller.selectAudioDevice(index) }
                 }
             }
 
             Text {
                 text: "音量 " + controller.volume + "%"
                 color: Qt.rgba(1,1,1,0.5)
-                font { pixelSize: 10 }
+                font { pixelSize: 10; family: Theme.fontMain }
             }
 
             Slider {
@@ -462,13 +521,13 @@ Item {
                     color: Qt.rgba(1,1,1,0.18)
                     Rectangle {
                         width: parent.parent.visualPosition * parent.width
-                        height: parent.height; radius: 2; color: "#d1d5db"
+                        height: parent.height; radius: 2; color: Theme.accentLight
                     }
                 }
                 handle: Rectangle {
                     x: parent.leftPadding + parent.visualPosition*(parent.availableWidth-width)
                     y: parent.topPadding + parent.availableHeight/2 - height/2
-                    width: 14; height: 14; radius: 7; color: "white"
+                    width: 14; height: 14; radius: 7; color: Theme.textPrimary
                 }
             }
         }

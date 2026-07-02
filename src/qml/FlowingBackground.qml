@@ -1,4 +1,5 @@
 import QtQuick
+import Melody
 
 // Apple-Music-style flowing radial-gradient background
 // Animates smoothly between colour blobs
@@ -6,7 +7,19 @@ Item {
     id: root
     property var colors: ["#1a1a2e","#16213e","#0f3460"]
 
-    // Time driver
+    // Normalize palette to exactly 3 colors so 1-2 color album art
+    // does not flatten the background vs. the 3-color default.
+    function _normalizedColors() {
+        var c = root.colors || []
+        if (c.length >= 3) return [c[0], c[1], c[2]]
+        if (c.length === 2) return [c[0], c[1], c[0]]
+        if (c.length === 1) return [c[0], c[0], c[0]]
+        return ["#1a1a2e","#16213e","#0f3460"]
+    }
+
+    // Time driver: to=100 with multipliers that are integer multiples of
+    // 2π/100, so both axes complete whole cycles at the loop boundary —
+    // no blob teleport. 0.0628318 ≈ 2π/100 (1 cycle), 0.0314159 ≈ π/100.
     NumberAnimation on _time {
         from: 0; to: 100; duration: 22000
         loops: Animation.Infinite
@@ -44,13 +57,13 @@ Item {
             ctx.fillRect(0, 0, width, height)
 
             var t = root._time
-            var cols = root.colors
+            var cols = root._normalizedColors()
 
             // Draw each colour as an animated radial blob
             for (var i = 0; i < cols.length; i++) {
                 var phase = i * 2.1
-                var cx = (0.25 + i * 0.3) * width + Math.sin(t * 0.06 + phase) * width * 0.22
-                var cy = (0.3  + i * 0.25) * height + Math.cos(t * 0.05 + phase) * height * 0.20
+                var cx = (0.25 + i * 0.3) * width + Math.sin(t * 0.0628318 + phase) * width * 0.22
+                var cy = (0.3  + i * 0.25) * height + Math.cos(t * 0.0314159 + phase) * height * 0.20
                 var r  = Math.max(width, height) * (0.52 + i * 0.12)
 
                 var grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r)

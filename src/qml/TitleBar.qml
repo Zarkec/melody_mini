@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Melody
 
 // Custom frameless title bar with drag support and window controls
 Item {
@@ -14,6 +15,7 @@ Item {
     // Drag area (whole bar)
     MouseArea {
         anchors.fill: parent
+        cursorShape: Qt.SizeAllCursor
         onPressed: (mouse) => root.dragStarted(Qt.point(mouse.x, mouse.y))
         onPositionChanged: (mouse) => root.dragging(Qt.point(mouse.x, mouse.y))
         onReleased: root.dragEnded()
@@ -33,8 +35,8 @@ Item {
 
         Text {
             text: "Melody"
-            color: "white"
-            font { pixelSize: 14; weight: Font.Medium }
+            color: Theme.textPrimary
+            font { pixelSize: 14; weight: Font.Medium; family: Theme.fontMain }
             opacity: 0.9
         }
     }
@@ -53,7 +55,7 @@ Item {
         // Close
         WinButton {
             symbol: "✕"
-            hoverColor: "#e74c3c"
+            hoverColor: Theme.closeHover
             onClicked: root.closeRequested()
         }
     }

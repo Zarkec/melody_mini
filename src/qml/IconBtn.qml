@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import Melody
 
 // Reusable icon button with hover/press feedback
 Rectangle {
@@ -12,15 +13,18 @@ Rectangle {
     width: 36; height: 36
     implicitWidth: width
     implicitHeight: height
-    radius: 8
-    color: pressed ? Qt.rgba(1,1,1,0.18)
-         : hovered ? Qt.rgba(1,1,1,0.10)
-         : Qt.rgba(1,1,1,0.06)
+    radius: Theme.radiusSm
+    color: pressed ? Theme.overlay18
+         : hovered ? Theme.overlay10
+         : Theme.overlay06
     property bool pressed: false
 
-    Behavior on color { ColorAnimation { duration: 110 } }
+    scale: pressed ? 0.96 : 1.0
+    Behavior on color { ColorAnimation { duration: Theme.durNormal; easing.type: Easing.OutCubic } }
+    Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutCubic } }
 
     opacity: enabled ? 1.0 : 0.35
+    Behavior on opacity { NumberAnimation { duration: Theme.durNormal; easing.type: Easing.OutCubic } }
 
     Image {
         anchors.centerIn: parent
@@ -38,6 +42,7 @@ Rectangle {
     MouseArea {
         anchors.fill: parent
         hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
         onEntered: root.hovered = true
         onExited:  { root.hovered = false; root.pressed = false }
         onPressed: root.pressed = true

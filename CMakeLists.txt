@@ -83,11 +83,16 @@ qt_add_executable(melody
 # -------------------------------------------------
 # QML 模块
 # -------------------------------------------------
+set_source_files_properties(${SRC_DIR}/qml/Theme.qml
+    PROPERTIES QT_QML_SINGLETON_TYPE TRUE
+)
+
 qt_add_qml_module(melody
     URI Melody
     VERSION 1.0
     RESOURCE_PREFIX "/"
     QML_FILES
+        src/qml/Theme.qml
         src/qml/Main.qml
         src/qml/TitleBar.qml
         src/qml/WinButton.qml

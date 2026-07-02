@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
+import Melody
 
 // Search page: search bar + source selector + result list + pagination
 Item {
@@ -30,20 +31,21 @@ Item {
                     height: 34
                     radius: 10
                     color: controller.searchSource === index
-                           ? Qt.rgba(1,1,1,0.18)
-                           : Qt.rgba(1,1,1,0.06)
-                    Behavior on color { ColorAnimation { duration: 180 } }
+                           ? Theme.overlay18
+                           : Theme.overlay06
+                    Behavior on color { ColorAnimation { duration: 180; easing.type: Easing.OutCubic } }
 
                     Text {
                         anchors.centerIn: parent
                         text: modelData
-                        color: "white"
-                        font { pixelSize: 12 }
+                        color: Theme.textPrimary
+                        font { pixelSize: 12; family: Theme.fontMain }
                         opacity: controller.searchSource === index ? 1.0 : 0.5
-                        Behavior on opacity { NumberAnimation { duration: 180 } }
+                        Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
                     }
                     MouseArea {
                         anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
                         onClicked: controller.searchSource = index
                     }
                 }
@@ -52,7 +54,7 @@ Item {
 
         // ── Search input row ──────────────────────────────────
         RowLayout {
-            spacing: 8
+            spacing: Theme.spaceSm
             Layout.fillWidth: true
             Layout.preferredHeight: 42
 
@@ -61,14 +63,14 @@ Item {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 42
                 height: 42
-                radius: 12
-                color: Qt.rgba(1,1,1,0.09)
+                radius: Theme.radiusMd
+                color: Theme.overlay09
                 border { color: searchField.activeFocus ? Qt.rgba(1,1,1,0.25) : "transparent"; width: 1 }
-                Behavior on border.color { ColorAnimation { duration: 150 } }
+                Behavior on border.color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
                 RowLayout {
-                    anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
-                    spacing: 8
+                    anchors { fill: parent; leftMargin: Theme.spaceMd; rightMargin: Theme.spaceMd }
+                    spacing: Theme.spaceSm
 
                     Image {
                         source: "qrc:/icons/search.png"
@@ -82,9 +84,9 @@ Item {
                         id: searchField
                         Layout.fillWidth: true
                         height: parent.height
-                        color: "white"
+                        color: Theme.textPrimary
                         selectionColor: Qt.rgba(0.7, 0.7, 0.7, 0.4)
-                        font { pixelSize: 13 }
+                        font { pixelSize: 13; family: Theme.fontMain }
                         clip: true
                         verticalAlignment: TextInput.AlignVCenter
                         Keys.onReturnPressed: doSearch()
@@ -105,13 +107,15 @@ Item {
                         id: clearBtn
                         visible: searchField.text.length > 0
                         text: "✕"
-                        color: clearHover.containsMouse ? "#e74c3c" : Qt.rgba(1,1,1,0.4)
-                        font.pixelSize: 16
+                        color: clearHover.containsMouse ? Theme.errorRed : Qt.rgba(1,1,1,0.4)
+                        font { pixelSize: 16; family: Theme.fontMain }
                         Layout.alignment: Qt.AlignVCenter
+                        Behavior on color { ColorAnimation { duration: Theme.durNormal; easing.type: Easing.OutCubic } }
                         MouseArea {
                             id: clearHover
                             anchors.fill: parent
                             hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
                             onClicked: searchField.text = ""
                         }
                     }
@@ -123,9 +127,11 @@ Item {
                 width: 42; height: 42
                 Layout.preferredWidth: 42
                 Layout.preferredHeight: 42
-                radius: 12
-                color: searchBtnArea.pressed ? Qt.rgba(0.7,0.7,0.7,0.30) : Qt.rgba(1,1,1,0.09)
-                Behavior on color { ColorAnimation { duration: 120 } }
+                radius: Theme.radiusMd
+                color: searchBtnArea.pressed ? Qt.rgba(0.7,0.7,0.7,0.30) : Theme.overlay09
+                Behavior on color { ColorAnimation { duration: Theme.durNormal; easing.type: Easing.OutCubic } }
+                scale: searchBtnArea.pressed ? 0.96 : 1.0
+                Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutCubic } }
 
                 Image {
                     anchors.centerIn: parent
@@ -138,6 +144,8 @@ Item {
                 MouseArea {
                     id: searchBtnArea
                     anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
                     enabled: !controller.searchLoading
                     onClicked: doSearch()
                 }
@@ -145,13 +153,23 @@ Item {
         }
 
         // ── Status / error message ────────────────────────────
-        Text {
-            visible: controller.statusMessage !== ""
-            text: controller.statusMessage
-            color: controller.statusIsError ? "#ff6b6b" : Qt.rgba(1,1,1,0.55)
-            font { pixelSize: 12 }
-            wrapMode: Text.WordWrap
+        // Fixed line height + opacity-only animation so the result list
+        // does not jump when status appears/disappears.
+        Item {
             Layout.fillWidth: true
+            Layout.preferredHeight: 18
+            opacity: controller.statusMessage !== "" ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
+
+            Text {
+                anchors.fill: parent
+                visible: controller.statusMessage !== ""
+                text: controller.statusMessage
+                color: controller.statusIsError ? Theme.errorRed : Theme.textSecondary
+                font { pixelSize: 12; family: Theme.fontMain }
+                wrapMode: Text.WordWrap
+                verticalAlignment: Text.AlignVCenter
+            }
         }
 
         // ── Result list ───────────────────────────────────────
@@ -177,8 +195,8 @@ Item {
                 width: resultList.width
                 height: 60
                 radius: 10
-                color: ma.containsMouse ? Qt.rgba(1,1,1,0.10) : "transparent"
-                Behavior on color { ColorAnimation { duration: 100 } }
+                color: ma.containsMouse ? Theme.overlay10 : "transparent"
+                Behavior on color { ColorAnimation { duration: 100; easing.type: Easing.OutCubic } }
 
                 Row {
                     anchors { fill: parent; leftMargin: 14; rightMargin: 14 }
@@ -188,12 +206,12 @@ Item {
                     Rectangle {
                         width: 18; height: 18; radius: 4
                         anchors.verticalCenter: parent.verticalCenter
-                        color: modelData.source === 1 ? "#fb7299" : "#e05555"
+                        color: modelData.source === 1 ? Theme.badgeBilibili : Theme.badgeNetease
                         Text {
                             anchors.centerIn: parent
                             text: modelData.source === 1 ? "B" : "N"
-                            color: "white"
-                            font { pixelSize: 9; bold: true }
+                            color: Theme.textPrimary
+                            font { pixelSize: 9; bold: true; family: Theme.fontMain }
                         }
                     }
 
@@ -205,15 +223,15 @@ Item {
                         Text {
                             width: parent.width
                             text: modelData.title || ""
-                            color: "white"
-                            font { pixelSize: 13 }
+                            color: Theme.textPrimary
+                            font { pixelSize: 13; family: Theme.fontMain }
                             elide: Text.ElideRight
                         }
                         Text {
                             width: parent.width
                             text: modelData.artist || ""
-                            color: Qt.rgba(1,1,1,0.45)
-                            font { pixelSize: 11 }
+                            color: Theme.textTertiary
+                            font { pixelSize: 11; family: Theme.fontMain }
                             elide: Text.ElideRight
                         }
                     }
@@ -224,7 +242,7 @@ Item {
                         width: 14; height: 14
                         anchors.verticalCenter: parent.verticalCenter
                         opacity: ma.containsMouse ? 0.55 : 0
-                        Behavior on opacity { NumberAnimation { duration: 120 } }
+                        Behavior on opacity { NumberAnimation { duration: Theme.durNormal; easing.type: Easing.OutCubic } }
                     }
                 }
 
@@ -232,6 +250,7 @@ Item {
                     id: ma
                     anchors.fill: parent
                     hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
                     onClicked: root.songClicked(index)
                 }
             }
@@ -240,6 +259,8 @@ Item {
             Item {
                 visible: controller.searchLoading
                 anchors.fill: parent
+                opacity: controller.searchLoading ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
                 Column {
                     anchors.centerIn: parent
                     spacing: 14
@@ -251,7 +272,7 @@ Item {
                     Text {
                         text: "搜索中…"
                         color: Qt.rgba(1,1,1,0.4)
-                        font { pixelSize: 12 }
+                        font { pixelSize: 12; family: Theme.fontMain }
                         anchors.horizontalCenter: parent.horizontalCenter
                     }
                 }
@@ -261,16 +282,18 @@ Item {
             Column {
                 visible: !controller.searchLoading && controller.searchResults.length === 0
                 anchors.centerIn: parent
-                spacing: 12
+                spacing: Theme.spaceMd
+                opacity: (!controller.searchLoading && controller.searchResults.length === 0) ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
                 Text {
                     text: "🎵"
-                    font.pixelSize: 38
+                    font { pixelSize: 38; family: Theme.fontMain }
                     anchors.horizontalCenter: parent.horizontalCenter
                 }
                 Text {
                     text: "搜索你喜欢的音乐"
                     color: Qt.rgba(1,1,1,0.30)
-                    font { pixelSize: 13 }
+                    font { pixelSize: 13; family: Theme.fontMain }
                     anchors.horizontalCenter: parent.horizontalCenter
                 }
             }
@@ -285,7 +308,7 @@ Item {
 
             IconBtn {
                 source: "qrc:/icons/previous-page.png"
-                width: 36; height: 36; radius: 8
+                width: 36; height: 36; radius: Theme.radiusSm
                 enabled: controller.currentPage > 1 && !controller.searchLoading
                 onClicked: controller.prevPage()
             }
@@ -298,13 +321,13 @@ Item {
                 text: controller.totalPages > 0
                     ? ("第 " + controller.currentPage + " / " + controller.totalPages + " 页")
                     : ""
-                color: Qt.rgba(1,1,1,0.50)
-                font { pixelSize: 12 }
+                color: Theme.textSecondary
+                font { pixelSize: 12; family: Theme.fontMain }
             }
 
             IconBtn {
                 source: "qrc:/icons/next-page.png"
-                width: 36; height: 36; radius: 8
+                width: 36; height: 36; radius: Theme.radiusSm
                 enabled: controller.currentPage < controller.totalPages && !controller.searchLoading
                 onClicked: controller.nextPage()
             }

@@ -2,7 +2,9 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
+import QtQuick.Effects
 import Qt.labs.platform 1.1
+import Melody
 
 Window {
     id: mainWindow
@@ -101,10 +103,21 @@ Window {
 
     // ── Rounded window shell container ────────────────────────
     Rectangle {
+        id: windowShell
         anchors.fill: parent
-        radius: 8
-        color: "#0d0d12"
+        radius: Theme.radiusSm
+        color: Theme.surfaceBase
         clip: true
+
+        // Real elevation: soft drop shadow so the frameless window reads as floating.
+        layer.enabled: true
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: Qt.rgba(0,0,0,0.45)
+            shadowBlur: 0.5
+            shadowVerticalOffset: 6
+            shadowHorizontalOffset: 0
+        }
 
         // ── Animated flowing background ───────────────────────────
         FlowingBackground {
@@ -113,99 +126,109 @@ Window {
             colors: mainWindow.bgColors
         }
 
-    // Dark overlay for readability
-    Rectangle {
-        anchors.fill: parent
-        radius: 8
-        gradient: Gradient {
-            orientation: Gradient.Vertical
-            GradientStop { position: 0.0; color: "transparent" }
-            GradientStop { position: 1.0; color: Qt.rgba(0,0,0,0.55) }
-        }
-    }
-
-    // ── Custom title bar ──────────────────────────────────────
-    TitleBar {
-        id: titleBar
-        anchors { top: parent.top; left: parent.left; right: parent.right }
-        height: 44
-        onCloseRequested:   mainWindow.close()
-        onMinimizeRequested: mainWindow.showMinimized()
-        onDragStarted: (pos) => {
-            mainWindow._dragStart = pos
-            mainWindow._dragging = true
-        }
-        onDragging: (pos) => {
-            if (mainWindow._dragging) {
-                mainWindow.x += pos.x - mainWindow._dragStart.x
-                mainWindow.y += pos.y - mainWindow._dragStart.y
-            }
-        }
-        onDragEnded: {
-            mainWindow._dragging = false
-        }
-    }
-
-    // ── PlayerPage Component to connect signals ──────────────
-    Component {
-        id: playerPageComponent
-        PlayerPage {
-            onMinimizeRequested: {
-                mainWindow.hide()
-                floatingIsland.show()
-            }
-        }
-    }
-
-    // ── Main content area ─────────────────────────────────────
-    StackView {
-        id: stack
-        anchors {
-            top: titleBar.bottom
-            left: parent.left
-            right: parent.right
-            bottom: parent.bottom
-        }
-        clip: true
-        initialItem: SearchPage {
-            id: searchPage
-            onSongClicked: (index) => {
-                console.log("QML: onSongClicked for index", index)
-                controller.playSongAt(index)
-                mainWindow.showPlayer()
+        // Dark overlay for readability
+        Rectangle {
+            anchors.fill: parent
+            gradient: Gradient {
+                orientation: Gradient.Vertical
+                GradientStop { position: 0.0; color: "transparent" }
+                GradientStop { position: 1.0; color: Qt.rgba(0,0,0,0.55) }
             }
         }
 
-        pushEnter: Transition {
-            PropertyAnimation { property: "x"; from: stack.width; to: 0; duration: 260; easing.type: Easing.OutCubic }
+        // ── Custom title bar ──────────────────────────────────────
+        TitleBar {
+            id: titleBar
+            anchors { top: parent.top; left: parent.left; right: parent.right }
+            height: 44
+            onCloseRequested:   mainWindow.close()
+            onMinimizeRequested: mainWindow.showMinimized()
+            onDragStarted: (pos) => {
+                mainWindow._dragStart = pos
+                mainWindow._dragging = true
+            }
+            onDragging: (pos) => {
+                if (mainWindow._dragging) {
+                    mainWindow.x += pos.x - mainWindow._dragStart.x
+                    mainWindow.y += pos.y - mainWindow._dragStart.y
+                }
+            }
+            onDragEnded: {
+                mainWindow._dragging = false
+            }
         }
-        pushExit: Transition {
-            PropertyAnimation { property: "x"; from: 0; to: -stack.width * 0.3; duration: 260; easing.type: Easing.OutCubic }
+
+        // ── PlayerPage Component to connect signals ──────────────
+        Component {
+            id: playerPageComponent
+            PlayerPage {
+                onMinimizeRequested: {
+                    mainWindow.hide()
+                    floatingIsland.show()
+                }
+            }
         }
-        popEnter: Transition {
-            PropertyAnimation { property: "x"; from: -stack.width * 0.3; to: 0; duration: 260; easing.type: Easing.OutCubic }
+
+        // ── Main content area ─────────────────────────────────────
+        StackView {
+            id: stack
+            anchors {
+                top: titleBar.bottom
+                left: parent.left
+                right: parent.right
+                bottom: parent.bottom
+            }
+            clip: true
+            initialItem: SearchPage {
+                id: searchPage
+                onSongClicked: (index) => {
+                    console.log("QML: onSongClicked for index", index)
+                    controller.playSongAt(index)
+                    mainWindow.showPlayer()
+                }
+            }
+
+            // Symmetric push/pop: both directions slide + fade, mirrored.
+            pushEnter: Transition {
+                ParallelAnimation {
+                    PropertyAnimation { property: "x"; from: stack.width; to: 0; duration: Theme.durPage; easing.type: Easing.OutCubic }
+                    PropertyAnimation { property: "opacity"; from: 0.0; to: 1.0; duration: Theme.durPage; easing.type: Easing.OutCubic }
+                }
+            }
+            pushExit: Transition {
+                ParallelAnimation {
+                    PropertyAnimation { property: "x"; from: 0; to: -stack.width * 0.3; duration: Theme.durPage; easing.type: Easing.OutCubic }
+                    PropertyAnimation { property: "opacity"; from: 1.0; to: 0.0; duration: Theme.durPage; easing.type: Easing.OutCubic }
+                }
+            }
+            popEnter: Transition {
+                ParallelAnimation {
+                    PropertyAnimation { property: "x"; from: -stack.width * 0.3; to: 0; duration: Theme.durPage; easing.type: Easing.OutCubic }
+                    PropertyAnimation { property: "opacity"; from: 0.0; to: 1.0; duration: Theme.durPage; easing.type: Easing.OutCubic }
+                }
+            }
+            popExit: Transition {
+                ParallelAnimation {
+                    PropertyAnimation { property: "x"; from: 0; to: stack.width; duration: Theme.durPage; easing.type: Easing.OutCubic }
+                    PropertyAnimation { property: "opacity"; from: 1.0; to: 0.0; duration: Theme.durPage; easing.type: Easing.OutCubic }
+                }
+            }
         }
-        popExit: Transition {
-            ParallelAnimation {
-                PropertyAnimation { property: "x"; from: 0; to: stack.width; duration: 260; easing.type: Easing.OutCubic }
-                PropertyAnimation { property: "opacity"; from: 1.0; to: 0.0; duration: 260; easing.type: Easing.OutCubic }
+
+        // Mini player bar 的 tapped() 才是进入播放页的唯一入口；
+        // 切歌（上一曲/下一曲/自动续播）不应强制跳转到播放页。
+        // ── Mini player bar (always visible) ─────────────────────
+        PlayerBar {
+            id: playerBar
+            anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+            height: 72
+            // Fade instead of hard visibility cut during page navigation.
+            opacity: stack.depth === 1 ? 1 : 0
+            visible: opacity > 0
+            Behavior on opacity { NumberAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
+            onTapped: {
+                if (stack.depth === 1) mainWindow.showPlayer()
             }
         }
     }
-
-
-
-    // Mini player bar 的 tapped() 才是进入播放页的唯一入口；
-    // 切歌（上一曲/下一曲/自动续播）不应强制跳转到播放页。
-    // ── Mini player bar (always visible) ─────────────────────
-    PlayerBar {
-        id: playerBar
-        anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-        height: 72
-        visible: stack.depth === 1
-        onTapped: {
-            if (stack.depth === 1) mainWindow.showPlayer()
-        }
-    }
-}
 }
