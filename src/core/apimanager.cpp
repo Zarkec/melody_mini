@@ -217,10 +217,10 @@ void ApiManager::downloadBilibiliImage(const QUrl &url)
     connect(reply, &QNetworkReply::finished, this, [this, reply](){ onBilibiliImageReplyFinished(reply); });
 }
 
-void ApiManager::downloadBilibiliAudio(const QUrl &url)
+void ApiManager::downloadBilibiliAudio(const QUrl &url, const QString &bvid)
 {
     // 使用流式下载到临时文件，实现边下边播
-    streamBilibiliAudio(url);
+    streamBilibiliAudio(url, bvid);
 }
 
 void ApiManager::onBilibiliSearchReplyFinished(QNetworkReply *reply)
@@ -341,20 +341,21 @@ void ApiManager::onBilibiliImageReplyFinished(QNetworkReply *reply)
     reply->deleteLater();
 }
 
-void ApiManager::streamBilibiliAudio(const QUrl &url)
+void ApiManager::streamBilibiliAudio(const QUrl &url, const QString &bvid)
 {
     QNetworkRequest request(url);
     setBilibiliHeaders(request);
 
     QNetworkReply *reply = manager->get(request);
 
-    // 创建临时文件
-    QTemporaryFile *tempFile = new QTemporaryFile();
+    // 临时文件挂到 reply 上：reply 析构时 tempFile 一并析构。
+    // 成功路径 setAutoRemove(false) 把磁盘文件交给 MusicController；失败/中途打断路径
+    // 保持 autoRemove=true，tempFile 随 reply 删除时自动清理磁盘，杜绝泄漏。
+    QTemporaryFile *tempFile = new QTemporaryFile(reply);
     if (!tempFile->open()) {
         qCWarning(logApi) << "Failed to create temp file for Bilibili audio stream";
         emit error("无法创建临时文件用于音频下载");
-        tempFile->deleteLater();
-        reply->deleteLater();
+        reply->deleteLater(); // tempFile 随之析构
         return;
     }
 
@@ -365,23 +366,21 @@ void ApiManager::streamBilibiliAudio(const QUrl &url)
         tempFile->write(reply->readAll());
     });
 
-    connect(reply, &QNetworkReply::finished, this, [this, reply, tempFile]() {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, tempFile, bvid]() {
         if (reply->error() != QNetworkReply::NoError) {
             qCWarning(logApi) << "Bilibili stream download failed:" << reply->errorString();
             emit error("流式下载Bilibili音频失败: " + reply->errorString());
-            tempFile->deleteLater();
+            // autoRemove 默认 true，tempFile 随 reply 删除时自动删盘
         } else {
             // 写入剩余数据
             tempFile->write(reply->readAll());
             tempFile->flush();
 
-            // 发送临时文件路径
-            emit bilibiliAudioFileReady(tempFile->fileName());
-
-            // 文件将由接收方管理，不要立即删除
+            // 文件将由接收方管理，关闭自动删除后再交出路径
             tempFile->setAutoRemove(false);
-            tempFile->deleteLater();
+            tempFile->close();
+            emit bilibiliAudioFileReady(tempFile->fileName(), bvid);
         }
-        reply->deleteLater();
+        reply->deleteLater(); // tempFile 随之析构（文件已 setAutoRemove(false)，不会被删）
     });
 }

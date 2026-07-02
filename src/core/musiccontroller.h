@@ -137,7 +137,7 @@ private slots:
     void onBilibiliSearchFinished(const QJsonDocument &json, const QString &keywords, int page);
     void onBilibiliVideoInfoFinished(const QJsonDocument &json, const QString &bvid);
     void onBilibiliAudioUrlReady(const QUrl &url, const QString &bvid, qint64 cid);
-    void onBilibiliAudioFileReady(const QString &filePath);
+    void onBilibiliAudioFileReady(const QString &filePath, const QString &bvid);
     void onBilibiliImageDownloaded(const QByteArray &data, const QUrl &url);
     void onApiError(const QString &errorString);
 

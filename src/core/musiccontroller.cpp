@@ -698,8 +698,13 @@ void MusicController::onBilibiliAudioUrlReady(const QUrl &url, const QString &bv
     m_currentBilibiliAudioBvid = bvid;
 }
 
-void MusicController::onBilibiliAudioFileReady(const QString &filePath)
+void MusicController::onBilibiliAudioFileReady(const QString &filePath, const QString &bvid)
 {
+    // 过期下载：用户已切到别的视频，丢弃此文件并立即删除，避免磁盘泄漏
+    if (bvid != m_currentBvid) {
+        QFile::remove(filePath);
+        return;
+    }
     cleanupTempAudio();
     setPlaybackLoading(false);
     m_tempAudioPath = filePath;
@@ -774,7 +779,7 @@ void MusicController::onMediaPlayerError(QMediaPlayer::Error error, const QStrin
     {
         qCInfo(logPlayer) << "ResourceError on Bilibili direct stream -> fallback to download mode";
         m_player->stop();
-        m_api->downloadBilibiliAudio(m_currentBilibiliAudioUrl);
+        m_api->downloadBilibiliAudio(m_currentBilibiliAudioUrl, m_currentBvid);
         m_currentBilibiliAudioUrl.clear();
         m_currentBilibiliAudioBvid.clear();
     } else {
