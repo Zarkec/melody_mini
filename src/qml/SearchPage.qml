@@ -7,6 +7,9 @@ import Melody
 Item {
     id: root
     property bool syncingSearchText: false
+    // 按搜索源缓存输入框草稿。之前未声明,onTextChanged 里 root.searchDrafts[...] = text
+    // 抛 TypeError(刷大量告警),且"切源恢复未提交输入"的功能完全失效。
+    property var searchDrafts: ({})
     signal songClicked(int index)
 
     ColumnLayout {
