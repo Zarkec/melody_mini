@@ -220,6 +220,7 @@ private:
     qint64 m_currentBilibiliCid = -1;
     QUrl m_currentBilibiliAudioUrl;
     QString m_currentBilibiliAudioBvid;
+    bool m_bilibiliFallbackPending = false;   // 直连 403 回退下载期间,抑制 GStreamer 残留错误
     QUrl m_pendingCoverUrl;
     int m_pendingCoverSource = 0;
 

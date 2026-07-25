@@ -219,7 +219,8 @@ void ApiManager::downloadBilibiliImage(const QUrl &url)
 
 void ApiManager::downloadBilibiliAudio(const QUrl &url, const QString &bvid)
 {
-    // 使用流式下载到临时文件，实现边下边播
+    // 下载到临时文件,完成后把文件路径交给 MusicController 播放。QMediaPlayer 直连 Bilibili
+    // CDN 因不带 Referer 会 403,故统一走这里用 QNetworkAccessManager 带 Referer 下载。
     streamBilibiliAudio(url, bvid);
 }
 
