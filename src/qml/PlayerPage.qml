@@ -16,7 +16,7 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             IconBtn {
-                source: "qrc:/icons/back.png"
+                source: "qrc:/icons/arrow-left.svg"
                 width: 32; height: 32; radius: Theme.radiusSm
                 onClicked: root.StackView.view.pop()
             }
@@ -307,9 +307,9 @@ Item {
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
                     source: {
-                        if (controller.playMode === 1) return "qrc:/icons/loop-one.png"
-                        if (controller.playMode === 2) return "qrc:/icons/shuffle.png"
-                        return "qrc:/icons/loop-list.png"
+                        if (controller.playMode === 1) return "qrc:/icons/repeat-1.svg"
+                        if (controller.playMode === 2) return "qrc:/icons/shuffle.svg"
+                        return "qrc:/icons/repeat.svg"
                     }
                     width: 36; height: 36; radius: Theme.radiusSm
                     tooltip: ["顺序","单曲循环","随机"][controller.playMode] || ""
@@ -325,7 +325,7 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
 
                 IconBtn {
-                    source: "qrc:/icons/previous.png"
+                    source: "qrc:/icons/skip-back.svg"
                     width: 40; height: 40; radius: 10
                     enabled: !controller.loading
                     onClicked: controller.playPrev()
@@ -387,8 +387,10 @@ Item {
 
                         Image {
                             anchors.centerIn: parent
-                            source: controller.playing ? "qrc:/icons/pause.png" : "qrc:/icons/play.png"
+                            source: controller.playing ? "qrc:/icons/pause.svg" : "qrc:/icons/play.svg"
                             width: 22; height: 22
+                            sourceSize.width: 44
+                            sourceSize.height: 44
                             visible: !controller.loading
                             smooth: true
                         }
@@ -407,7 +409,7 @@ Item {
                 }
 
                 IconBtn {
-                    source: "qrc:/icons/next.png"
+                    source: "qrc:/icons/skip-forward.svg"
                     width: 40; height: 40; radius: 10
                     enabled: !controller.loading
                     onClicked: controller.playNext()
@@ -430,7 +432,7 @@ Item {
 
                     // Mini mode button
                     IconBtn {
-                        source: "qrc:/icons/minimize.png"
+                        source: "qrc:/icons/minimize-2.svg"
                         width: 36; height: 36; radius: Theme.radiusSm
                         tooltip: "迷你模式"
                         onClicked: root.minimizeRequested()
@@ -441,10 +443,10 @@ Item {
                         id: volBtn
                         source: {
                             var v = controller.volume
-                            if (v === 0) return "qrc:/icons/volume-mute.png"
-                            if (v < 30)  return "qrc:/icons/volume-low.png"
-                            if (v < 70)  return "qrc:/icons/volume-medium.png"
-                            return "qrc:/icons/volume-high.png"
+                            if (v === 0) return "qrc:/icons/volume-x.svg"
+                            if (v < 30)  return "qrc:/icons/volume.svg"
+                            if (v < 70)  return "qrc:/icons/volume-1.svg"
+                            return "qrc:/icons/volume-2.svg"
                         }
                         width: 36; height: 36; radius: Theme.radiusSm
                         onClicked: volumePopup.visible = !volumePopup.visible

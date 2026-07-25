@@ -1,23 +1,22 @@
 <!DOCTYPE RCC><RCC version="1.0">
 <qresource prefix="/">
     <file>logo.png</file>
-    <file>icons/play.png</file>
-    <file>icons/pause.png</file>
-    <file>icons/previous.png</file>
-    <file>icons/next.png</file>
-    <file>icons/volume-high.png</file>
-    <file>icons/volume-medium.png</file>
-    <file>icons/volume-low.png</file>
-    <file>icons/volume-mute.png</file>
-    <file>icons/loop-list.png</file>
-    <file>icons/loop-one.png</file>
-    <file>icons/shuffle.png</file>
-    <file>icons/previous-page.png</file>
-    <file>icons/next-page.png</file>
-    <file>icons/back.png</file>
-    <file>icons/search.png</file>
-    <file>icons/minimize.png</file>
-    <file>icons/maximize.png</file>
+    <file>icons/play.svg</file>
+    <file>icons/pause.svg</file>
+    <file>icons/skip-back.svg</file>
+    <file>icons/skip-forward.svg</file>
+    <file>icons/shuffle.svg</file>
+    <file>icons/repeat.svg</file>
+    <file>icons/repeat-1.svg</file>
+    <file>icons/volume.svg</file>
+    <file>icons/volume-1.svg</file>
+    <file>icons/volume-2.svg</file>
+    <file>icons/volume-x.svg</file>
+    <file>icons/search.svg</file>
+    <file>icons/arrow-left.svg</file>
+    <file>icons/chevron-left.svg</file>
+    <file>icons/chevron-right.svg</file>
+    <file>icons/minimize-2.svg</file>
     <file>icons/loading.gif</file>
     <file>fonts/JetBrainsMono.ttf</file>
     <file>fonts/HarmonyOS_Sans_SC_Medium.ttf</file>

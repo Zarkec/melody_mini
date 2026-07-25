@@ -77,7 +77,7 @@ Item {
                     spacing: Theme.spaceSm
 
                     Image {
-                        source: "qrc:/icons/search.png"
+                        source: "qrc:/icons/search.svg"
                         sourceSize.width: 15
                         sourceSize.height: 15
                         Layout.alignment: Qt.AlignVCenter
@@ -149,7 +149,7 @@ Item {
 
                 Image {
                     anchors.centerIn: parent
-                    source: "qrc:/icons/search.png"
+                    source: "qrc:/icons/search.svg"
                     sourceSize.width: 18
                     sourceSize.height: 18
                     opacity: controller.searchLoading ? 0.4 : 0.85
@@ -252,8 +252,10 @@ Item {
 
                     Image {
                         id: playArrow
-                        source: "qrc:/icons/play.png"
+                        source: "qrc:/icons/play.svg"
                         width: 14; height: 14
+                        sourceSize.width: 28
+                        sourceSize.height: 28
                         anchors.verticalCenter: parent.verticalCenter
                         opacity: ma.containsMouse ? 0.55 : 0
                         Behavior on opacity { NumberAnimation { duration: Theme.durNormal; easing.type: Easing.OutCubic } }
@@ -321,7 +323,7 @@ Item {
             height: 36
 
             IconBtn {
-                source: "qrc:/icons/previous-page.png"
+                source: "qrc:/icons/chevron-left.svg"
                 width: 36; height: 36; radius: Theme.radiusSm
                 enabled: controller.currentPage > 1 && !controller.searchLoading
                 onClicked: controller.prevPage()
@@ -340,7 +342,7 @@ Item {
             }
 
             IconBtn {
-                source: "qrc:/icons/next-page.png"
+                source: "qrc:/icons/chevron-right.svg"
                 width: 36; height: 36; radius: Theme.radiusSm
                 enabled: controller.currentPage < controller.totalPages && !controller.searchLoading
                 onClicked: controller.nextPage()

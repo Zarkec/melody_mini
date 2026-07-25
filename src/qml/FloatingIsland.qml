@@ -137,21 +137,21 @@ Window {
                 Layout.alignment: Qt.AlignVCenter
 
                 IconBtn {
-                    source: "qrc:/icons/previous.png"
+                    source: "qrc:/icons/skip-back.svg"
                     Layout.preferredWidth: 24
                     Layout.preferredHeight: 24
                     radius: 12
                     onClicked: controller.playPrev()
                 }
                 IconBtn {
-                    source: controller.playing ? "qrc:/icons/pause.png" : "qrc:/icons/play.png"
+                    source: controller.playing ? "qrc:/icons/pause.svg" : "qrc:/icons/play.svg"
                     Layout.preferredWidth: 24
                     Layout.preferredHeight: 24
                     radius: 12
                     onClicked: controller.playPause()
                 }
                 IconBtn {
-                    source: "qrc:/icons/next.png"
+                    source: "qrc:/icons/skip-forward.svg"
                     Layout.preferredWidth: 24
                     Layout.preferredHeight: 24
                     radius: 12

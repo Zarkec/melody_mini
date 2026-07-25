@@ -91,7 +91,7 @@ Item {
                 spacing: 4
 
                 IconBtn {
-                    source: "qrc:/icons/previous.png"
+                    source: "qrc:/icons/skip-back.svg"
                     width: 32; height: 32; radius: Theme.radiusXs
                     enabled: !controller.loading
                     onClicked: controller.playPrev()
@@ -151,8 +151,10 @@ Item {
 
                         Image {
                             anchors.centerIn: parent
-                            source: controller.playing ? "qrc:/icons/pause.png" : "qrc:/icons/play.png"
+                            source: controller.playing ? "qrc:/icons/pause.svg" : "qrc:/icons/play.svg"
                             width: 16; height: 16
+                            sourceSize.width: 32
+                            sourceSize.height: 32
                             smooth: true
                         }
                         MouseArea {
@@ -169,7 +171,7 @@ Item {
                 }
 
                 IconBtn {
-                    source: "qrc:/icons/next.png"
+                    source: "qrc:/icons/skip-forward.svg"
                     width: 32; height: 32; radius: Theme.radiusXs
                     enabled: !controller.loading
                     onClicked: controller.playNext()

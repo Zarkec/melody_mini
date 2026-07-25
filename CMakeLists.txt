@@ -21,7 +21,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Qt（Qt6）— 添加 Quick 和 QuickControls2
 # -------------------------------------------------
 find_package(Qt6 6.4 REQUIRED COMPONENTS
-    Core Gui Quick QuickControls2 Network Multimedia Sql ShaderTools)
+    Core Gui Quick QuickControls2 Network Multimedia Sql ShaderTools Svg)
 
 message(STATUS "Found Qt version: ${Qt6_VERSION}")
 
@@ -142,6 +142,7 @@ target_link_libraries(melody PRIVATE
     Qt6::Network
     Qt6::Multimedia
     Qt6::Sql
+    Qt6::Svg
 )
 
 # -------------------------------------------------
