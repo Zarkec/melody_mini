@@ -8,16 +8,6 @@
 #include <QNetworkReply>
 #include <QUrl>
 
-// Bilibili视频信息结构体
-struct BilibiliVideo {
-    QString bvid;
-    QString title;
-    QString author;
-    QString pic;      // 封面图URL
-    qint64 cid;       // 用于获取播放地址
-    int duration;     // 时长（秒）
-};
-
 class ApiManager : public QObject
 {
     Q_OBJECT
@@ -36,8 +26,8 @@ public:
     void getBilibiliVideoInfo(const QString &bvid);
     void getBilibiliAudioUrl(const QString &bvid, qint64 cid);
     void downloadBilibiliImage(const QUrl &url);
-    void downloadBilibiliAudio(const QUrl &url);
-    void streamBilibiliAudio(const QUrl &url); // 新增：流式下载到临时文件
+    void downloadBilibiliAudio(const QUrl &url, const QString &bvid);
+    void streamBilibiliAudio(const QUrl &url, const QString &bvid); // 流式下载到临时文件
 
 signals:
     // 网易云音乐信号
@@ -51,8 +41,7 @@ signals:
     void bilibiliSearchFinished(const QJsonDocument &json, const QString &keywords, int page);
     void bilibiliVideoInfoFinished(const QJsonDocument &json, const QString &bvid);
     void bilibiliAudioUrlReady(const QUrl &url, const QString &bvid, qint64 cid);
-    void bilibiliAudioDataReady(const QByteArray &data);
-    void bilibiliAudioFileReady(const QString &filePath); // 新增：临时文件路径信号
+    void bilibiliAudioFileReady(const QString &filePath, const QString &bvid); // 临时文件路径信号
     void bilibiliImageDownloaded(const QByteArray &data, const QUrl &url);
 
     void error(const QString &errorString);
@@ -69,7 +58,6 @@ private slots:
     void onBilibiliVideoInfoReplyFinished(QNetworkReply *reply);
     void onBilibiliAudioUrlReplyFinished(QNetworkReply *reply);
     void onBilibiliImageReplyFinished(QNetworkReply *reply);
-    void onBilibiliAudioDownloadFinished(QNetworkReply *reply);
 
 private:
     QNetworkAccessManager *manager;

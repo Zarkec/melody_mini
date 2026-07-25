@@ -2,11 +2,15 @@ cmake_minimum_required(VERSION 3.16)
 
 project(melody VERSION 1.0.0 LANGUAGES CXX)
 
+# Suppress QTP0004 warning (single-directory QML module)
+if(POLICY QTP0004)
+    cmake_policy(SET QTP0004 NEW)
+endif()
+
 # -------------------------------------------------
 # 基础 CMake / Qt 自动化配置
 # -------------------------------------------------
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
-set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
@@ -14,9 +18,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # -------------------------------------------------
-# Qt（Qt6）
+# Qt（Qt6）— 添加 Quick 和 QuickControls2
 # -------------------------------------------------
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets Network Multimedia)
+find_package(Qt6 6.5 REQUIRED COMPONENTS
+    Core Gui Quick QuickControls2 Network Multimedia Sql)
 
 message(STATUS "Found Qt version: ${Qt6_VERSION}")
 
@@ -28,19 +33,17 @@ set(SRC_DIR ${CMAKE_SOURCE_DIR}/src)
 set(CORE_SOURCES
     ${SRC_DIR}/core/apimanager.cpp
     ${SRC_DIR}/core/playlistmanager.cpp
+    ${SRC_DIR}/core/musiccontroller.cpp
+    ${SRC_DIR}/core/appstatestore.cpp
+    ${SRC_DIR}/core/logger.cpp
 )
 
 set(CORE_HEADERS
     ${SRC_DIR}/core/apimanager.h
     ${SRC_DIR}/core/playlistmanager.h
-)
-
-set(UI_SOURCES
-    ${SRC_DIR}/ui/widget.cpp
-)
-
-set(UI_HEADERS
-    ${SRC_DIR}/ui/widget.h
+    ${SRC_DIR}/core/musiccontroller.h
+    ${SRC_DIR}/core/appstatestore.h
+    ${SRC_DIR}/core/logger.h
 )
 
 set(MAIN_SOURCES
@@ -50,8 +53,6 @@ set(MAIN_SOURCES
 set(ALL_SOURCES
     ${CORE_SOURCES}
     ${CORE_HEADERS}
-    ${UI_SOURCES}
-    ${UI_HEADERS}
     ${MAIN_SOURCES}
 )
 
@@ -82,13 +83,36 @@ qt_add_executable(melody
 )
 
 # -------------------------------------------------
+# QML 模块
+# -------------------------------------------------
+set_source_files_properties(${SRC_DIR}/qml/Theme.qml
+    PROPERTIES QT_QML_SINGLETON_TYPE TRUE
+)
+
+qt_add_qml_module(melody
+    URI Melody
+    VERSION 1.0
+    RESOURCE_PREFIX "/"
+    QML_FILES
+        src/qml/Theme.qml
+        src/qml/Main.qml
+        src/qml/TitleBar.qml
+        src/qml/WinButton.qml
+        src/qml/FlowingBackground.qml
+        src/qml/SearchPage.qml
+        src/qml/PlayerPage.qml
+        src/qml/PlayerBar.qml
+        src/qml/IconBtn.qml
+        src/qml/FloatingIsland.qml
+)
+
+# -------------------------------------------------
 # 头文件搜索路径
 # -------------------------------------------------
 target_include_directories(melody PRIVATE
     ${CMAKE_SOURCE_DIR}
     ${SRC_DIR}
     ${SRC_DIR}/core
-    ${SRC_DIR}/ui
     ${CMAKE_BINARY_DIR}
 )
 
@@ -97,9 +121,12 @@ target_include_directories(melody PRIVATE
 # -------------------------------------------------
 target_link_libraries(melody PRIVATE
     Qt6::Core
-    Qt6::Widgets
+    Qt6::Gui
+    Qt6::Quick
+    Qt6::QuickControls2
     Qt6::Network
     Qt6::Multimedia
+    Qt6::Sql
 )
 
 # -------------------------------------------------
@@ -120,7 +147,7 @@ install(TARGETS melody
 )
 
 if(WIN32)
-    qt_generate_deploy_app_script(
+    qt_generate_deploy_qml_app_script(
         TARGET melody
         OUTPUT_SCRIPT deploy_script
         NO_UNSUPPORTED_PLATFORM_ERROR
