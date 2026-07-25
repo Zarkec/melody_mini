@@ -31,9 +31,39 @@ Window {
         id: islandShell
         anchors.fill: parent
         radius: height / 2
-        // Sleek semi-transparent dark background
-        color: Qt.rgba(0.08, 0.08, 0.12, 0.92)
-        border { color: Qt.rgba(1,1,1,0.1); width: 1 }
+
+        // Cover-art tinted look: the palette's dominant color glows from
+        // the album-art side and fades into the dark base on the right.
+        readonly property color coverAccent: controller.paletteColors.length >= 1
+                                             ? controller.paletteColors[0] : "#3c3c4c"
+        function tint(darkerFactor, alpha) {
+            const c = Qt.darker(coverAccent, darkerFactor)
+            return Qt.rgba(c.r, c.g, c.b, alpha)
+        }
+
+        color: Qt.rgba(0.08, 0.08, 0.12, 0.92) // fallback before palette arrives
+        gradient: Gradient {
+            orientation: Gradient.Horizontal
+            GradientStop {
+                position: 0.0
+                color: islandShell.tint(1.5, 0.95)
+                Behavior on color { ColorAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
+            }
+            GradientStop {
+                position: 0.5
+                color: islandShell.tint(2.4, 0.93)
+                Behavior on color { ColorAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
+            }
+            GradientStop {
+                position: 1.0
+                color: Qt.rgba(0.08, 0.08, 0.12, 0.92)
+            }
+        }
+        border {
+            width: 1
+            color: islandShell.tint(1.0, 0.35)
+            Behavior on color { ColorAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
+        }
 
         // Widen the outer-edge AA fringe (~2px) so the pill edge looks
         // smooth at DPR 1; the shell keeps its own radius so the 1px
