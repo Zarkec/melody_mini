@@ -20,7 +20,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # -------------------------------------------------
 # Qt（Qt6）— 添加 Quick 和 QuickControls2
 # -------------------------------------------------
-find_package(Qt6 6.5 REQUIRED COMPONENTS
+find_package(Qt6 6.4 REQUIRED COMPONENTS
     Core Gui Quick QuickControls2 Network Multimedia Sql)
 
 message(STATUS "Found Qt version: ${Qt6_VERSION}")
