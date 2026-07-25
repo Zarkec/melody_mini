@@ -21,7 +21,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Qt（Qt6）— 添加 Quick 和 QuickControls2
 # -------------------------------------------------
 find_package(Qt6 6.4 REQUIRED COMPONENTS
-    Core Gui Quick QuickControls2 Network Multimedia Sql)
+    Core Gui Quick QuickControls2 Network Multimedia Sql ShaderTools)
 
 message(STATUS "Found Qt version: ${Qt6_VERSION}")
 
@@ -103,7 +103,22 @@ qt_add_qml_module(melody
         src/qml/PlayerPage.qml
         src/qml/PlayerBar.qml
         src/qml/IconBtn.qml
+        src/qml/RoundedImage.qml
+        src/qml/WindowCornerMask.qml
         src/qml/FloatingIsland.qml
+)
+
+# -------------------------------------------------
+# 着色器（编译为 .qsb，供 RoundedImage 的 ShaderEffect 使用）
+# -------------------------------------------------
+qt_add_shaders(melody "shaders"
+    PREFIX "/shaders"
+    FILES
+        src/shaders/roundedimage.frag
+        src/shaders/roundedmask.frag
+    OUTPUTS
+        roundedimage.frag.qsb
+        roundedmask.frag.qsb
 )
 
 # -------------------------------------------------

@@ -134,20 +134,18 @@ Item {
 
                 // Double-image crossfade on cover change. The dead
                 // "Behavior on source" cannot crossfade; this does.
-                Image {
+                RoundedImage {
                     id: artImgA
                     anchors.fill: parent
-                    fillMode: Image.PreserveAspectCrop
-                    smooth: true
+                    radius: Theme.radiusMd
                     asynchronous: true
                     opacity: 1
                     Behavior on opacity { NumberAnimation { duration: Theme.durPage; easing.type: Easing.OutCubic } }
                 }
-                Image {
+                RoundedImage {
                     id: artImgB
                     anchors.fill: parent
-                    fillMode: Image.PreserveAspectCrop
-                    smooth: true
+                    radius: Theme.radiusMd
                     asynchronous: true
                     opacity: 0
                     Behavior on opacity { NumberAnimation { duration: Theme.durPage; easing.type: Easing.OutCubic } }

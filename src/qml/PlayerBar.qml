@@ -12,11 +12,11 @@ Item {
         id: bgRect
         anchors.fill: parent
         color: Qt.rgba(0.05, 0.05, 0.08, 0.92)
-        radius: Theme.radiusSm
+        radius: Theme.radiusMd
         // Cover top corners to keep them square (only round bottom window corners)
         Rectangle {
             anchors { top: parent.top; left: parent.left; right: parent.right }
-            height: Theme.radiusSm
+            height: Theme.radiusMd
             color: bgRect.color
         }
 
@@ -47,13 +47,11 @@ Item {
             Rectangle {
                 width: 44; height: 44; radius: Theme.radiusSm
                 color: Theme.overlay06
-                clip: true
 
-                Image {
+                RoundedImage {
                     anchors.fill: parent
+                    radius: Theme.radiusSm
                     source: controller.albumArtUrl
-                    fillMode: Image.PreserveAspectCrop
-                    smooth: true
                     asynchronous: true
                 }
                 Text {
