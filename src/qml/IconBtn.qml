@@ -31,6 +31,9 @@ Rectangle {
         source: root.source
         width: parent.width * 0.52
         height: parent.height * 0.52
+        // Supersample SVG icons 2x so edges stay crisp after downscaling.
+        sourceSize.width: width * 2
+        sourceSize.height: height * 2
         smooth: true
         fillMode: Image.PreserveAspectFit
     }

@@ -12,11 +12,11 @@ Item {
         id: bgRect
         anchors.fill: parent
         color: Qt.rgba(0.05, 0.05, 0.08, 0.92)
-        radius: Theme.radiusSm
+        radius: Theme.radiusMd
         // Cover top corners to keep them square (only round bottom window corners)
         Rectangle {
             anchors { top: parent.top; left: parent.left; right: parent.right }
-            height: Theme.radiusSm
+            height: Theme.radiusMd
             color: bgRect.color
         }
 
@@ -47,13 +47,11 @@ Item {
             Rectangle {
                 width: 44; height: 44; radius: Theme.radiusSm
                 color: Theme.overlay06
-                clip: true
 
-                Image {
+                RoundedImage {
                     anchors.fill: parent
+                    radius: Theme.radiusSm
                     source: controller.albumArtUrl
-                    fillMode: Image.PreserveAspectCrop
-                    smooth: true
                     asynchronous: true
                 }
                 Text {
@@ -93,7 +91,7 @@ Item {
                 spacing: 4
 
                 IconBtn {
-                    source: "qrc:/icons/previous.png"
+                    source: "qrc:/icons/skip-back.svg"
                     width: 32; height: 32; radius: Theme.radiusXs
                     enabled: !controller.loading
                     onClicked: controller.playPrev()
@@ -153,8 +151,10 @@ Item {
 
                         Image {
                             anchors.centerIn: parent
-                            source: controller.playing ? "qrc:/icons/pause.png" : "qrc:/icons/play.png"
+                            source: controller.playing ? "qrc:/icons/pause.svg" : "qrc:/icons/play.svg"
                             width: 16; height: 16
+                            sourceSize.width: 32
+                            sourceSize.height: 32
                             smooth: true
                         }
                         MouseArea {
@@ -171,7 +171,7 @@ Item {
                 }
 
                 IconBtn {
-                    source: "qrc:/icons/next.png"
+                    source: "qrc:/icons/skip-forward.svg"
                     width: 32; height: 32; radius: Theme.radiusXs
                     enabled: !controller.loading
                     onClicked: controller.playNext()

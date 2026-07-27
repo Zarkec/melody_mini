@@ -111,6 +111,12 @@ public slots:
     Q_INVOKABLE void selectBilibiliPage(int index);
     Q_INVOKABLE QString formatTime(qint64 ms) const;
 
+    // ---- 缓存/日志管理（设置页） ----
+    Q_INVOKABLE qint64 cacheSizeBytes() const;
+    Q_INVOKABLE void clearCache();
+    Q_INVOKABLE qint64 logSizeBytes() const;
+    Q_INVOKABLE void clearLogs();
+
 signals:
     void playingChanged();
     void positionChanged();
@@ -131,6 +137,7 @@ signals:
     void audioDevicesChanged();
     void paletteColorsChanged();
     void bilipagesChanged();
+    void cacheInfoChanged();
 
 private slots:
     // Network callbacks
@@ -220,6 +227,7 @@ private:
     qint64 m_currentBilibiliCid = -1;
     QUrl m_currentBilibiliAudioUrl;
     QString m_currentBilibiliAudioBvid;
+    bool m_bilibiliFallbackPending = false;   // 直连 403 回退下载期间,抑制 GStreamer 残留错误
     QUrl m_pendingCoverUrl;
     int m_pendingCoverSource = 0;
 

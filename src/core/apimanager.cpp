@@ -6,6 +6,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QTemporaryFile>
+#include <QDir>
 #include "logger.h"
 
 ApiManager::ApiManager(QObject *parent)
@@ -219,7 +220,8 @@ void ApiManager::downloadBilibiliImage(const QUrl &url)
 
 void ApiManager::downloadBilibiliAudio(const QUrl &url, const QString &bvid)
 {
-    // 使用流式下载到临时文件，实现边下边播
+    // 下载到临时文件,完成后把文件路径交给 MusicController 播放。QMediaPlayer 直连 Bilibili
+    // CDN 因不带 Referer 会 403,故统一走这里用 QNetworkAccessManager 带 Referer 下载。
     streamBilibiliAudio(url, bvid);
 }
 
@@ -351,7 +353,8 @@ void ApiManager::streamBilibiliAudio(const QUrl &url, const QString &bvid)
     // 临时文件挂到 reply 上：reply 析构时 tempFile 一并析构。
     // 成功路径 setAutoRemove(false) 把磁盘文件交给 MusicController；失败/中途打断路径
     // 保持 autoRemove=true，tempFile 随 reply 删除时自动清理磁盘，杜绝泄漏。
-    QTemporaryFile *tempFile = new QTemporaryFile(reply);
+    // 命名模板带 melody_audio_ 前缀:设置页的缓存清理按此前缀识别/统计遗留文件。
+    QTemporaryFile *tempFile = new QTemporaryFile(QDir::tempPath() + "/melody_audio_XXXXXX.m4a", reply);
     if (!tempFile->open()) {
         qCWarning(logApi) << "Failed to create temp file for Bilibili audio stream";
         emit error("无法创建临时文件用于音频下载");

@@ -12,6 +12,8 @@
 #include <QJsonValue>
 #include <QRegularExpression>
 #include <QFile>
+#include <QFileInfo>
+#include <QStandardPaths>
 #include <algorithm>
 #include "logger.h"
 
@@ -309,6 +311,63 @@ QString MusicController::formatTime(qint64 ms) const
 }
 
 // ============================================================
+// 缓存/日志管理（设置页）
+// ============================================================
+
+qint64 MusicController::cacheSizeBytes() const
+{
+    qint64 total = 0;
+    total += QFileInfo(QDir::tempPath() + "/melody_cover.jpg").size();
+    const QFileInfoList audioFiles =
+        QDir(QDir::tempPath()).entryInfoList({"melody_audio_*"}, QDir::Files);
+    for (const QFileInfo &fi : audioFiles)
+        total += fi.size();
+    return total;
+}
+
+void MusicController::clearCache()
+{
+    QFile::remove(QDir::tempPath() + "/melody_cover.jpg");
+    const QFileInfoList audioFiles =
+        QDir(QDir::tempPath()).entryInfoList({"melody_audio_*"}, QDir::Files);
+    for (const QFileInfo &fi : audioFiles) {
+        // 正在播放的回退下载文件:Linux 下 unlink 安全(播放器持有 fd),
+        // Windows 下删除被占用文件会失败,静默跳过即可。
+        QFile::remove(fi.absoluteFilePath());
+    }
+    qCInfo(logPlayer) << "Cache cleared (cover + temp audio)";
+    emit cacheInfoChanged();
+}
+
+qint64 MusicController::logSizeBytes() const
+{
+    qint64 total = 0;
+    const QString dir =
+        QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/logs";
+    const QFileInfoList logs = QDir(dir).entryInfoList({"*.log"}, QDir::Files);
+    for (const QFileInfo &fi : logs)
+        total += fi.size();
+    return total;
+}
+
+void MusicController::clearLogs()
+{
+    const QString dir =
+        QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/logs";
+    // 当天的日志文件仍被 logger 持有,跳过
+    const QString today =
+        "melody_" + QDateTime::currentDateTime().toString("yyyyMMdd") + ".log";
+    const QFileInfoList logs = QDir(dir).entryInfoList({"*.log"}, QDir::Files);
+    int removed = 0;
+    for (const QFileInfo &fi : logs) {
+        if (fi.fileName() == today) continue;
+        if (QFile::remove(fi.absoluteFilePath())) ++removed;
+    }
+    qCInfo(logPlayer) << "Old logs cleared:" << removed << "files";
+    emit cacheInfoChanged();
+}
+
+// ============================================================
 // Private helpers
 // ============================================================
 
@@ -574,6 +633,7 @@ void MusicController::playSong(qint64 id)
     m_pendingCoverUrl = QUrl();
     m_currentBilibiliAudioUrl = QUrl();
     m_currentBilibiliAudioBvid.clear();
+    m_bilibiliFallbackPending = false;
     m_bilibiliPages.clear();
     m_currentBilibiliPageIndex = 0;
     m_currentBilibiliCid = -1;
@@ -616,6 +676,7 @@ void MusicController::playBilibiliVideo(const QString &bvid)
     m_pendingCoverUrl = QUrl();
     m_currentBilibiliAudioUrl = QUrl();
     m_currentBilibiliAudioBvid.clear();
+    m_bilibiliFallbackPending = false;
     m_bilibiliPages.clear();
     m_currentBilibiliPageIndex = 0;
     m_currentBilibiliCid = -1;
@@ -838,10 +899,13 @@ void MusicController::onBilibiliVideoInfoFinished(const QJsonDocument &json, con
 void MusicController::onBilibiliAudioUrlReady(const QUrl &url, const QString &bvid, qint64 cid)
 {
     if (bvid != m_currentBvid || (m_currentBilibiliCid != -1 && cid != m_currentBilibiliCid)) return;
-    m_player->setSource(url);
-    m_player->play();
+    // 优先尝试直连流式播放(mcdn 等 CDN 可秒播)。upos-sz-* CDN 要求 Referer,QMediaPlayer
+    // 直连会 403 —— 由 onMediaPlayerError 捕获后回退到带 Referer 的下载模式。
+    m_bilibiliFallbackPending = false;
     m_currentBilibiliAudioUrl = url;
     m_currentBilibiliAudioBvid = bvid;
+    m_player->setSource(url);
+    m_player->play();
 }
 
 void MusicController::onBilibiliAudioFileReady(const QString &filePath, const QString &bvid)
@@ -853,6 +917,7 @@ void MusicController::onBilibiliAudioFileReady(const QString &filePath, const QS
     }
     cleanupTempAudio();
     setPlaybackLoading(false);
+    m_bilibiliFallbackPending = false;
     m_tempAudioPath = filePath;
     m_player->setSource(QUrl::fromLocalFile(filePath));
     m_player->play();
@@ -903,7 +968,9 @@ void MusicController::onPlaybackStateChanged(QMediaPlayer::PlaybackState state)
 
 void MusicController::onMediaStatusChanged(QMediaPlayer::MediaStatus status)
 {
-    qCDebug(logPlayer) << "MediaStatus:" << status;
+    // BufferingMedia/BufferedMedia 在播放过程中每隔几百毫秒来回跳,纯噪声,不打日志。
+    if (status != QMediaPlayer::BufferingMedia && status != QMediaPlayer::BufferedMedia)
+        qCDebug(logPlayer) << "MediaStatus:" << status;
     if (status == QMediaPlayer::EndOfMedia) {
         qCInfo(logPlayer) << "EndOfMedia -> playNext";
         playNext();
@@ -913,22 +980,30 @@ void MusicController::onMediaStatusChanged(QMediaPlayer::MediaStatus status)
 
 void MusicController::onMediaPlayerError(QMediaPlayer::Error error, const QString &errorString)
 {
-    qCWarning(logPlayer) << "MediaPlayer error:" << error
-                         << "|" << (errorString.isEmpty() ? QStringLiteral("(no detail)") : errorString);
-
+    // 直连 Bilibili 流遇到 403(upos CDN 要求 Referer):预期内,降级为 INFO 并回退到下载模式。
     if (error == QMediaPlayer::ResourceError &&
         !m_currentBilibiliAudioUrl.isEmpty() &&
         !m_currentBvid.isEmpty() &&
         m_currentBilibiliAudioBvid == m_currentBvid)
     {
-        qCInfo(logPlayer) << "ResourceError on Bilibili direct stream -> fallback to download mode";
+        qCInfo(logPlayer).noquote() << "Bilibili direct stream blocked (" << errorString
+                                    << "), fallback to download mode";
+        m_bilibiliFallbackPending = true;   // 抑制回退过程中 GStreamer 拆除直连管道的残留错误
         m_player->stop();
         m_api->downloadBilibiliAudio(m_currentBilibiliAudioUrl, m_currentBvid);
         m_currentBilibiliAudioUrl.clear();
         m_currentBilibiliAudioBvid.clear();
-    } else {
-        setPlaybackLoading(false);
+        return;
     }
+
+    // 回退下载期间 GStreamer 拆管产生的残留错误(Internal data stream error / 流中没有足够数据),
+    // 属于噪声,直接忽略。
+    if (m_bilibiliFallbackPending && error == QMediaPlayer::ResourceError)
+        return;
+
+    qCWarning(logPlayer) << "MediaPlayer error:" << error
+                         << "|" << (errorString.isEmpty() ? QStringLiteral("(no detail)") : errorString);
+    setPlaybackLoading(false);
 }
 
 void MusicController::onAudioOutputsChanged()

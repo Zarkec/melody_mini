@@ -104,21 +104,28 @@ Window {
     Rectangle {
         id: windowShell
         anchors.fill: parent
-        radius: Theme.radiusSm
+        // The outer rounded edge is produced by WindowCornerMask below
+        // (wider, smoother AA than Rectangle's built-in ~1px fringe),
+        // so the shell itself stays square.
+        radius: 0
         color: Theme.surfaceBase
         clip: true
+
+        layer.enabled: true
+        layer.smooth: true
+        layer.effect: WindowCornerMask { radius: Theme.radiusMd }
 
         // Spotify-style static gradient background
         Rectangle {
             id: spotifyBg
             anchors.fill: parent
-            radius: Theme.radiusSm
+            radius: Theme.radiusMd
             color: Theme.surfaceBase
 
             // Gradient fading from the dominant cover color to transparent
             Rectangle {
                 anchors.fill: parent
-                radius: Theme.radiusSm
+                radius: Theme.radiusMd
                 gradient: Gradient {
                     orientation: Gradient.Vertical
                     GradientStop {
@@ -140,6 +147,11 @@ Window {
             height: 44
             onCloseRequested:   mainWindow.close()
             onMinimizeRequested: mainWindow.showMinimized()
+            onSettingsRequested: {
+                // From any page: pop back to root, then slide into settings.
+                if (stack.depth > 1) stack.pop(null, StackView.Immediate)
+                stack.push(settingsPageComponent)
+            }
             onDragStarted: (pos) => {
                 mainWindow._dragStart = pos
                 mainWindow._dragging = true
@@ -164,6 +176,12 @@ Window {
                     floatingIsland.show()
                 }
             }
+        }
+
+        // ── SettingsPage Component ──────────────────────────────
+        Component {
+            id: settingsPageComponent
+            SettingsPage {}
         }
 
         // ── Main content area ─────────────────────────────────────

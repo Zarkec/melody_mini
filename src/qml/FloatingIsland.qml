@@ -5,8 +5,8 @@ import Melody
 
 Window {
     id: island
-    width: 300
-    height: 46
+    width: 340
+    height: 52
     x: (Screen.width - width) / 2
     y: 10
     flags: Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
@@ -30,10 +30,47 @@ Window {
     Rectangle {
         id: islandShell
         anchors.fill: parent
-        radius: Theme.radiusPill
-        // Sleek semi-transparent dark background
-        color: Qt.rgba(0.08, 0.08, 0.12, 0.92)
-        border { color: Qt.rgba(1,1,1,0.1); width: 1 }
+        radius: height / 2
+
+        // Cover-art tinted look: the palette's dominant color glows from
+        // the album-art side and fades into the dark base on the right.
+        readonly property color coverAccent: controller.paletteColors.length >= 1
+                                             ? controller.paletteColors[0] : "#3c3c4c"
+        function tint(darkerFactor, alpha) {
+            const c = Qt.darker(coverAccent, darkerFactor)
+            return Qt.rgba(c.r, c.g, c.b, alpha)
+        }
+
+        color: Qt.rgba(0.08, 0.08, 0.12, 0.92) // fallback before palette arrives
+        gradient: Gradient {
+            orientation: Gradient.Horizontal
+            GradientStop {
+                position: 0.0
+                color: islandShell.tint(1.5, 0.95)
+                Behavior on color { ColorAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
+            }
+            GradientStop {
+                position: 0.5
+                color: islandShell.tint(2.4, 0.93)
+                Behavior on color { ColorAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
+            }
+            GradientStop {
+                position: 1.0
+                color: Qt.rgba(0.08, 0.08, 0.12, 0.92)
+            }
+        }
+        border {
+            width: 1
+            color: islandShell.tint(1.0, 0.35)
+            Behavior on color { ColorAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
+        }
+
+        // Widen the outer-edge AA fringe (~2px) so the pill edge looks
+        // smooth at DPR 1; the shell keeps its own radius so the 1px
+        // border follows the curve correctly.
+        layer.enabled: true
+        layer.smooth: true
+        layer.effect: WindowCornerMask { radius: islandShell.height / 2 }
 
         // Fade/scale in on show so the handoff from main window feels intentional.
         scale: island.visible ? 1 : 0.96
@@ -47,19 +84,17 @@ Window {
 
             // Album art thumbnail
             Rectangle {
-                width: 32; height: 32
-                Layout.preferredWidth: 32
-                Layout.preferredHeight: 32
-                radius: 16
-                clip: true
+                width: 34; height: 34
+                Layout.preferredWidth: 34
+                Layout.preferredHeight: 34
+                radius: 17
                 color: Theme.overlay06
                 Layout.alignment: Qt.AlignVCenter
 
-                Image {
+                RoundedImage {
                     anchors.fill: parent
+                    radius: parent.width / 2
                     source: controller.albumArtUrl
-                    fillMode: Image.PreserveAspectCrop
-                    smooth: true
                 }
                 Text {
                     visible: controller.albumArtUrl == ""
@@ -72,15 +107,20 @@ Window {
             // Song Info (Title & Artist)
             ColumnLayout {
                 Layout.fillWidth: true
+                Layout.rightMargin: Theme.spaceSm
                 Layout.alignment: Qt.AlignVCenter
-                spacing: 1
+                spacing: 2
 
                 Text {
                     Layout.fillWidth: true
                     text: controller.currentSongName || "未在播放"
                     color: Theme.textPrimary
-                    font { pixelSize: 11; bold: true; family: Theme.fontMain }
+                    font { pixelSize: 12; bold: true; family: Theme.fontMain }
                     elide: Text.ElideRight
+                    // Color-emoji fallback fonts report a large ascent, which
+                    // would otherwise stretch the line box and crowd the artist.
+                    lineHeight: 0.95
+                    lineHeightMode: Text.ProportionalHeight
                 }
                 Text {
                     Layout.fillWidth: true
@@ -93,22 +133,28 @@ Window {
 
             // Control Buttons
             RowLayout {
-                spacing: Theme.spaceXs
+                spacing: 6
                 Layout.alignment: Qt.AlignVCenter
 
                 IconBtn {
-                    source: "qrc:/icons/previous.png"
-                    width: 22; height: 22; radius: 11
+                    source: "qrc:/icons/skip-back.svg"
+                    Layout.preferredWidth: 24
+                    Layout.preferredHeight: 24
+                    radius: 12
                     onClicked: controller.playPrev()
                 }
                 IconBtn {
-                    source: controller.playing ? "qrc:/icons/pause.png" : "qrc:/icons/play.png"
-                    width: 22; height: 22; radius: 11
+                    source: controller.playing ? "qrc:/icons/pause.svg" : "qrc:/icons/play.svg"
+                    Layout.preferredWidth: 24
+                    Layout.preferredHeight: 24
+                    radius: 12
                     onClicked: controller.playPause()
                 }
                 IconBtn {
-                    source: "qrc:/icons/next.png"
-                    width: 22; height: 22; radius: 11
+                    source: "qrc:/icons/skip-forward.svg"
+                    Layout.preferredWidth: 24
+                    Layout.preferredHeight: 24
+                    radius: 12
                     onClicked: controller.playNext()
                 }
             }
