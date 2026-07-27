@@ -147,6 +147,11 @@ Window {
             height: 44
             onCloseRequested:   mainWindow.close()
             onMinimizeRequested: mainWindow.showMinimized()
+            onSettingsRequested: {
+                // From any page: pop back to root, then slide into settings.
+                if (stack.depth > 1) stack.pop(null, StackView.Immediate)
+                stack.push(settingsPageComponent)
+            }
             onDragStarted: (pos) => {
                 mainWindow._dragStart = pos
                 mainWindow._dragging = true
@@ -171,6 +176,12 @@ Window {
                     floatingIsland.show()
                 }
             }
+        }
+
+        // ── SettingsPage Component ──────────────────────────────
+        Component {
+            id: settingsPageComponent
+            SettingsPage {}
         }
 
         // ── Main content area ─────────────────────────────────────

@@ -11,6 +11,7 @@ Rectangle {
     color: hovered ? (hoverColor !== "" ? hoverColor : Theme.overlay12) : "transparent"
 
     property string symbol: ""
+    property string icon: ""
     property string hoverColor: ""
     property bool hovered: false
     property bool pressed: false
@@ -21,9 +22,22 @@ Rectangle {
     Behavior on color { ColorAnimation { duration: Theme.durNormal; easing.type: Easing.OutCubic } }
     Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutCubic } }
 
+    Image {
+        anchors.centerIn: parent
+        source: root.icon
+        visible: root.icon !== ""
+        width: 14; height: 14
+        sourceSize.width: 28
+        sourceSize.height: 28
+        smooth: true
+        opacity: root.hovered ? 1.0 : 0.7
+        Behavior on opacity { NumberAnimation { duration: Theme.durNormal; easing.type: Easing.OutCubic } }
+    }
+
     Text {
         anchors.centerIn: parent
         text: root.symbol
+        visible: root.icon === ""
         color: Theme.textPrimary
         font { pixelSize: 18; family: Theme.fontMain }
         opacity: root.hovered ? 1.0 : 0.7

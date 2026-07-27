@@ -100,6 +100,7 @@ qt_add_qml_module(melody
         src/qml/WinButton.qml
         src/qml/FlowingBackground.qml
         src/qml/SearchPage.qml
+        src/qml/SettingsPage.qml
         src/qml/PlayerPage.qml
         src/qml/PlayerBar.qml
         src/qml/IconBtn.qml

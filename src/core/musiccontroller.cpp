@@ -12,6 +12,8 @@
 #include <QJsonValue>
 #include <QRegularExpression>
 #include <QFile>
+#include <QFileInfo>
+#include <QStandardPaths>
 #include <algorithm>
 #include "logger.h"
 
@@ -306,6 +308,63 @@ QString MusicController::formatTime(qint64 ms) const
 {
     qint64 s = ms / 1000;
     return QString("%1:%2").arg(s / 60, 2, 10, QChar('0')).arg(s % 60, 2, 10, QChar('0'));
+}
+
+// ============================================================
+// 缓存/日志管理（设置页）
+// ============================================================
+
+qint64 MusicController::cacheSizeBytes() const
+{
+    qint64 total = 0;
+    total += QFileInfo(QDir::tempPath() + "/melody_cover.jpg").size();
+    const QFileInfoList audioFiles =
+        QDir(QDir::tempPath()).entryInfoList({"melody_audio_*"}, QDir::Files);
+    for (const QFileInfo &fi : audioFiles)
+        total += fi.size();
+    return total;
+}
+
+void MusicController::clearCache()
+{
+    QFile::remove(QDir::tempPath() + "/melody_cover.jpg");
+    const QFileInfoList audioFiles =
+        QDir(QDir::tempPath()).entryInfoList({"melody_audio_*"}, QDir::Files);
+    for (const QFileInfo &fi : audioFiles) {
+        // 正在播放的回退下载文件:Linux 下 unlink 安全(播放器持有 fd),
+        // Windows 下删除被占用文件会失败,静默跳过即可。
+        QFile::remove(fi.absoluteFilePath());
+    }
+    qCInfo(logPlayer) << "Cache cleared (cover + temp audio)";
+    emit cacheInfoChanged();
+}
+
+qint64 MusicController::logSizeBytes() const
+{
+    qint64 total = 0;
+    const QString dir =
+        QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/logs";
+    const QFileInfoList logs = QDir(dir).entryInfoList({"*.log"}, QDir::Files);
+    for (const QFileInfo &fi : logs)
+        total += fi.size();
+    return total;
+}
+
+void MusicController::clearLogs()
+{
+    const QString dir =
+        QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/logs";
+    // 当天的日志文件仍被 logger 持有,跳过
+    const QString today =
+        "melody_" + QDateTime::currentDateTime().toString("yyyyMMdd") + ".log";
+    const QFileInfoList logs = QDir(dir).entryInfoList({"*.log"}, QDir::Files);
+    int removed = 0;
+    for (const QFileInfo &fi : logs) {
+        if (fi.fileName() == today) continue;
+        if (QFile::remove(fi.absoluteFilePath())) ++removed;
+    }
+    qCInfo(logPlayer) << "Old logs cleared:" << removed << "files";
+    emit cacheInfoChanged();
 }
 
 // ============================================================

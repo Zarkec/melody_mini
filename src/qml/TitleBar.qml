@@ -8,6 +8,7 @@ Item {
 
     signal closeRequested()
     signal minimizeRequested()
+    signal settingsRequested()
     signal dragStarted(point pos)
     signal dragging(point pos)
     signal dragEnded()
@@ -44,6 +45,12 @@ Item {
     RowLayout {
         anchors { verticalCenter: parent.verticalCenter; right: parent.right; rightMargin: 10 }
         spacing: 4
+
+        // Settings
+        WinButton {
+            icon: "qrc:/icons/settings.svg"
+            onClicked: root.settingsRequested()
+        }
 
         // Minimize
         WinButton {
